@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "affiliate-outfits"
+version = "0.1.0"
+description = "Deterministic-first affiliate fashion content engine."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "anthropic>=0.69",
+  "Pillow>=10.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.0",
+]
+image = [
+  "rembg[cpu]>=2.0.67",
+]
+all = [
+  "pytest>=8.0",
+  "rembg[cpu]>=2.0.67",
+]
+
+[project.scripts]
+affiliate-outfits = "app.main:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py", "tests.py"]

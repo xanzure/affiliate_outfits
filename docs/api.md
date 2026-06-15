@@ -4,6 +4,10 @@ Everything communicates through typed interfaces.
 
 No agent should directly call another agent.
 
+Creative brief payloads should be passed as structured JSON. A brief can include a display seed, but services should preserve all context fields.
+
+AI endpoints are API-backed agents that return structured JSON. Request and response schemas still matter because deterministic validators use them before the pipeline continues.
+
 ---
 
 ## Outfit
@@ -16,7 +20,25 @@ Input:
 
 ```json
 {
-  "prompt": "...",
+  "brief": {
+    "seed": "Bad Bunny summer concert outfit",
+    "subject": "Bad Bunny",
+    "occasion": "summer concert",
+    "context_notes": [
+      "Puerto Rican cultural references are relevant"
+    ],
+    "style_cues": [
+      "streetwear",
+      "statement accessories"
+    ],
+    "required_considerations": [
+      "Do not reduce this to a generic summer outfit"
+    ],
+    "avoid": [
+      "costume styling",
+      "cultural stereotypes"
+    ]
+  },
   "history": []
 }
 ```
@@ -26,7 +48,9 @@ Output:
 ```json
 {
   "outfit": {},
-  "products": []
+  "products": [],
+  "interpretation": {},
+  "search_queries": []
 }
 ```
 
@@ -50,9 +74,77 @@ Output:
 
 ```json
 {
-  "image_path": "..."
+  "image_path": "...",
+  "layout": {
+    "canvas": {
+      "width": 1080,
+      "height": 1350
+    },
+    "pieces": [
+      {
+        "index": 0,
+        "product_id": "product_123",
+        "image_path": "data/images/normalized/product_123.png",
+        "x": 80,
+        "y": 80,
+        "width": 444,
+        "height": 585
+      }
+    ]
+  }
 }
 ```
+
+---
+
+## Product Search
+
+Method:
+
+`POST /products/search`
+
+Input:
+
+```json
+{
+  "queries": [
+    {
+      "query": "Puerto Rico color canvas cap concert outfit",
+      "category": "hat",
+      "limit": 5
+    }
+  ]
+}
+```
+
+Output:
+
+```json
+{
+  "selected_products": [
+    {
+      "id": "product_123",
+      "retailer": "Example Retailer",
+      "name": "Canvas Cap",
+      "category": "hat",
+      "url": "https://example.com/product",
+      "affiliate_url": null,
+      "image_url": "https://example.com/image.jpg",
+      "local_image_path": "data/images/normalized/product_123.jpg",
+      "price_cents": 2400,
+      "currency": "USD"
+    }
+  ],
+  "stored_candidates": 5
+}
+```
+
+Rules:
+
+- Use API-backed product search only; do not scrape.
+- Store the normal product URL and affiliate URL separately.
+- Prefer `affiliate_url` when present and fall back to `url`.
+- Download product images locally before collage rendering.
 
 ---
 
@@ -66,7 +158,7 @@ Input:
 
 ```json
 {
-  "prompt": "...",
+  "brief": {},
   "outfit": {}
 }
 ```
@@ -83,11 +175,11 @@ Output:
 
 ---
 
-## Prompt
+## Concept Replacement
 
 Method:
 
-`POST /prompt/generate`
+`POST /concept/generate`
 
 Input:
 
@@ -101,7 +193,13 @@ Output:
 
 ```json
 {
-  "new_prompt": "..."
+  "new_brief": {
+    "seed": "...",
+    "context_notes": [],
+    "style_cues": [],
+    "required_considerations": [],
+    "avoid": []
+  }
 }
 ```
 
@@ -130,6 +228,10 @@ Output:
   "platform_ids": {}
 }
 ```
+
+When autoposting is enabled, the publisher maps local image paths to public URLs using `PUBLIC_ASSET_BASE_URL`, posts due TikTok/Pinterest records through platform APIs, and stores platform IDs on the post records.
+
+TikTok slideshow posts require public photo URLs. Pinterest scheduled posts are scheduled locally; the due-post publisher sends each pin to Pinterest when its scheduled time arrives.
 
 ---
 

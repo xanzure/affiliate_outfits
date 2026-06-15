@@ -8,51 +8,68 @@ AI should only be used where subjective or creative decisions are required.
 
 Everything else should be implemented deterministically.
 
+The scheduler and storage layers operate on creative briefs, not generic outfit labels. A creative brief may include a simple display phrase, but it must also preserve contextual fields that the Outfit Agent can interpret later.
+
+AI stages run through the configured LLM provider. The current provider is Anthropic Claude. Each agent requests structured JSON, and deterministic validators check the response before the pipeline continues.
+
+Daily volume should feel human-run. The system should maintain 8 active scored concepts, select 1 top-ranked eligible concept per day, generate 5 outfits from that concept, create 1 TikTok slideshow post, create 5 Pinterest posts spaced through the day, and avoid concepts used today or within the previous 2 fixed-EST calendar days.
+
 ---
 
 ## Pipeline
 
 ### Scheduler (Deterministic)
 
-1. Load active prompt list
-2. Determine which prompts need posts today
-3. Determine how many outfits to generate per prompt
+1. Load active creative brief concepts
+2. Exclude concepts posted today, yesterday, or the day before yesterday in fixed EST
+3. Sort eligible concepts by ranking score, highest first
+4. Select the single top-ranked eligible concept for the day
+5. Pass the full brief payload forward without reducing it to a one-line phrase
 
 ---
 
 ### Outfit Agent (AI)
 
+Implementation: Claude-backed JSON agent.
+
 Input:
 
-- Prompt
+- Creative brief
 - Outfit history
 
 Responsibilities:
 
-4. Check outfit history for that prompt
-5. Generate new outfit specification
-6. Validate diversity constraints
-7. Regenerate if diversity check fails
-8. Normalize into structured clothing categories
-9. Generate retailer search queries
-10. Search affiliate retailers
-11. Rank matching products
-12. Select best products
+5. Check outfit history for that brief and related references
+6. Interpret subject, occasion, cultural context, known looks, color cues, silhouettes, and avoid rules
+7. Generate 5 distinct outfit specifications for the selected concept
+8. Validate diversity constraints
+9. Regenerate if diversity check fails
+10. Normalize into structured clothing categories
+11. Generate product search queries that preserve important brief cues
+12. Pass search queries to the deterministic product pipeline
 
 Output:
 
-- Structured outfit
-- Selected products
+- Five structured outfit concepts
+- Search strategy
+- Interpretation rationale
+- Search strategy
 
 ---
 
 ### Product Pipeline (Deterministic)
 
-13. Retrieve affiliate link
-14. Download product image
-15. Verify image quality
-16. Remove background
-17. Normalize image size/orientation
+15. Search Google Shopping through an API provider, never scraping
+16. Normalize result fields into internal product candidates
+17. Block suspicious retailers and allow conditional cheap/accessory retailers only for low-stakes categories
+18. Prefer cheaper safe items while preserving the API-backed candidate set
+19. Store accepted candidates, including price, retailer, normal URL, image URL, source metadata, and candidate rank
+20. Select one product per outfit search slot for the actual outfit
+21. Resolve affiliate URL only when a configured affiliate resolver is available
+22. Download product image
+23. Verify image quality
+24. Remove background
+25. Normalize image size/orientation
 
 Output:
 
@@ -60,7 +77,9 @@ Output:
 
 ---
 
-### Collage Agent (AI)
+### Collage Renderer (Deterministic)
+
+Initial implementation: deterministic collage rendering. A subjective layout agent can be added later if needed.
 
 Input:
 
@@ -69,19 +88,21 @@ Input:
 
 Responsibilities:
 
-18. Generate collage layout
-19. Place products into layout
-20. Add text / branding / numbering
+26. Generate collage layout
+27. Place products into layout
+28. Add text / branding / numbering
+29. Store canvas and per-piece placement data for website recreation
 
 Output:
 
 - Final collage design
+- Collage layout manifest with canvas dimensions, product IDs, image paths, and x/y/width/height for each piece
 
 ---
 
 ### Image Export (Deterministic)
 
-21. Export final image
+30. Export final image
 
 Output:
 
@@ -91,18 +112,20 @@ Output:
 
 ### Engagement Agent (AI)
 
+Implementation: Claude-backed JSON agent.
+
 Input:
 
-- Prompt
-- Outfit
+- Creative brief
+- Outfit set
 
 Responsibilities:
 
-22. Generate TikTok caption
-23. Generate Pinterest description
-24. Generate hashtags
-25. Select music category
-26. Select trending sound from internal library
+31. Generate one TikTok slideshow caption
+32. Generate five Pinterest titles/descriptions
+33. Generate hashtags
+34. Select music category
+35. Select trending sound from internal library
 
 Output:
 
@@ -114,42 +137,47 @@ Output:
 
 ### Publishing (Deterministic)
 
-27. Generate landing page (optional)
-28. Attach affiliate links
-29. Upload TikTok
-30. Upload Pinterest
-31. Store post IDs
+36. Generate landing page (optional)
+37. Attach affiliate links when links are available, otherwise attach normal product URLs
+38. Create one local TikTok slideshow record and five scheduled Pinterest records
+39. If autoposting is disabled, keep local draft/scheduled records only
+40. If autoposting is enabled, publish due TikTok/Pinterest records through platform APIs
+41. Store platform identifiers and API responses when posting succeeds
+42. Mark failed posts with API error metadata for retry/debugging
 
 Output:
 
-- Published posts
+- Mirrored local draft records
 - Platform identifiers
 
 ---
 
 ### Analytics (Deterministic)
 
-32. Wait for collection window
-33. Collect views
-34. Collect likes
-35. Collect comments
-36. Collect shares
-37. Collect saves
-38. Collect affiliate clicks
-39. Compute engagement score
-40. Update prompt statistics
-41. Check engagement trend
-42. Increment/reset decline counter
-43. Retire prompt if necessary
+43. Wait for collection window
+44. Accept manually supplied views
+45. Accept manually supplied likes
+46. Accept manually supplied comments
+47. Accept manually supplied shares
+48. Accept manually supplied saves
+49. Accept manually supplied affiliate clicks
+50. Compute engagement score
+51. Convert post performance into a concept score adjustment
+52. Update the concept ranking score
+53. Clamp concept score between 0 and 100
+54. Retire concepts below 25
 
 Output:
 
 - Updated metrics
-- Prompt performance history
+- Updated concept ranking score
+- Concept performance history
 
 ---
 
 ### Prompt Agent (AI)
+
+Implementation: Claude-backed JSON agent.
 
 Input:
 
@@ -157,18 +185,18 @@ Input:
 
 Responsibilities:
 
-44. Generate replacement prompt
-45. Add replacement prompt to active pool
+55. Generate replacement creative brief when a concept retires
+56. Add replacement brief to the `needs_review` pool
 
 Output:
 
-- New active prompt
+- New replacement concept awaiting approval
 
 ---
 
 ### Storage (Deterministic)
 
-46. Store all assets, metadata, metrics, and history
+57. Store all assets, metadata, metrics, briefs, and history
 
 ---
 
@@ -179,9 +207,10 @@ Output:
 Responsible for:
 
 - outfit generation
+- creative brief interpretation
 - diversity
-- retailer search
-- product selection
+- product search
+- product candidate ranking and selection
 
 Not responsible for:
 
@@ -228,8 +257,8 @@ Not responsible for:
 
 Responsible for:
 
-- generating replacement prompts
-- maintaining prompt freshness
+- generating replacement creative briefs
+- maintaining concept freshness
 
 Not responsible for:
 
@@ -243,7 +272,7 @@ Not responsible for:
 The system should always follow:
 
 ```text
-Prompt
+Creative Brief
   -> Outfit Agent
   -> Product Pipeline
   -> Collage Agent
@@ -258,3 +287,5 @@ Prompt
 No agent should call another agent directly.
 
 Every stage should accept a typed input, produce a typed output, and be independently executable and testable.
+
+Deterministic stages should never erase the original brief context. If an agent needs a simplified display phrase, that phrase should be derived in addition to the full brief, not instead of it.

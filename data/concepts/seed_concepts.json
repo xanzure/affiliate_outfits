@@ -1,0 +1,315 @@
+[
+  {
+    "seed": "Bad Bunny concert",
+    "subject": "Bad Bunny",
+    "occasion": "concert outfit",
+    "context_notes": [
+      "Puerto Rican cultural references are relevant when handled tastefully",
+      "Reference relaxed celebrity streetwear, playful accessories, bold sunglasses, and warm-weather concert styling",
+      "Use red, white, and blue color cues subtly through palette or accessories when product availability allows"
+    ],
+    "style_cues": [
+      "streetwear",
+      "music-event styling",
+      "statement accessories",
+      "relaxed proportions",
+      "comfortable concert footwear"
+    ],
+    "color_cues": [
+      "red",
+      "white",
+      "blue",
+      "black",
+      "sun-washed neutrals"
+    ],
+    "required_considerations": [
+      "Preserve the artist-specific reference",
+      "Include at least one brief-specific detail when product availability allows",
+      "Do not reduce this to a generic summer concert outfit"
+    ],
+    "avoid": [
+      "costume styling",
+      "cultural stereotypes",
+      "unsupported claims about identity or symbolism"
+    ],
+    "ranking_score": 50,
+    "status": "active",
+    "metadata": {
+      "source": "manual_seed",
+      "brief_schema_version": 1
+    }
+  },
+  {
+    "seed": "Euro Summer",
+    "subject": "European summer travel",
+    "occasion": "day-to-night vacation outfit",
+    "context_notes": [
+      "Should feel like a polished outfit for walking, cafes, and evening drinks",
+      "Lean Mediterranean without becoming costume-like",
+      "Prioritize packable pieces and warm-weather fabrics"
+    ],
+    "style_cues": [
+      "linen",
+      "sleek sandals",
+      "woven texture",
+      "tailored shorts or skirt",
+      "minimal jewelry"
+    ],
+    "color_cues": [
+      "white",
+      "navy",
+      "tomato red",
+      "olive",
+      "straw"
+    ],
+    "required_considerations": [
+      "Balance comfort for walking with a polished vacation look",
+      "Include at least one travel-specific accessory or texture"
+    ],
+    "avoid": [
+      "overly beach-only styling",
+      "heavy fabrics",
+      "generic tourist costume cues"
+    ],
+    "ranking_score": 50,
+    "status": "active",
+    "metadata": {
+      "source": "manual_seed",
+      "brief_schema_version": 1
+    }
+  },
+  {
+    "seed": "Ibiza Beach Club",
+    "subject": "Ibiza beach club",
+    "occasion": "beach club day party",
+    "context_notes": [
+      "Should feel elevated, sun-ready, and nightlife-adjacent",
+      "Pieces need to work over swimwear or in a resort setting",
+      "Metallics, crochet, sheer layers, and statement sunglasses are relevant"
+    ],
+    "style_cues": [
+      "resortwear",
+      "crochet or mesh layer",
+      "metallic accessories",
+      "strappy sandals",
+      "bold sunglasses"
+    ],
+    "color_cues": [
+      "white",
+      "gold",
+      "turquoise",
+      "black",
+      "citrus"
+    ],
+    "required_considerations": [
+      "Keep the outfit beach-club appropriate, not just beachwear",
+      "Include a cover-up, layer, or accessory that makes the outfit feel styled"
+    ],
+    "avoid": [
+      "office-like styling",
+      "winter fabrics",
+      "plain swimsuit-only looks"
+    ],
+    "ranking_score": 50,
+    "status": "active",
+    "metadata": {
+      "source": "manual_seed",
+      "brief_schema_version": 1
+    }
+  },
+  {
+    "seed": "Old Money",
+    "subject": "old money aesthetic",
+    "occasion": "polished everyday outfit",
+    "context_notes": [
+      "Should feel restrained, tailored, and expensive-looking without requiring luxury prices",
+      "Prioritize classic silhouettes, quality-looking textures, and minimal logos"
+    ],
+    "style_cues": [
+      "tailoring",
+      "loafers",
+      "knitwear",
+      "pleated trouser",
+      "structured bag",
+      "minimal jewelry"
+    ],
+    "color_cues": [
+      "navy",
+      "cream",
+      "camel",
+      "black",
+      "forest green"
+    ],
+    "required_considerations": [
+      "Avoid loud branding",
+      "Make the outfit look elevated through silhouette and texture"
+    ],
+    "avoid": [
+      "logo-heavy pieces",
+      "flashy trend pieces",
+      "costume prep styling"
+    ],
+    "ranking_score": 50,
+    "status": "active",
+    "metadata": {
+      "source": "manual_seed",
+      "brief_schema_version": 1
+    }
+  },
+  {
+    "seed": "Nantucket Coastal",
+    "subject": "Nantucket coastal style",
+    "occasion": "coastal weekend outfit",
+    "context_notes": [
+      "Should feel New England coastal rather than generic beach",
+      "Preppy stripes, knits, boat-ready layers, and wind-aware styling are relevant",
+      "Outfit should work for town, ferry, or casual dinner"
+    ],
+    "style_cues": [
+      "striped knit",
+      "white denim",
+      "light sweater",
+      "boat shoe or sandal",
+      "canvas tote"
+    ],
+    "color_cues": [
+      "navy",
+      "white",
+      "sand",
+      "red",
+      "washed blue"
+    ],
+    "required_considerations": [
+      "Include a coastal layer or nautical-adjacent texture",
+      "Keep the outfit polished enough for town"
+    ],
+    "avoid": [
+      "pirate or sailor costume cues",
+      "overly tropical styling",
+      "fragile shoes for walking"
+    ],
+    "ranking_score": 50,
+    "status": "active",
+    "metadata": {
+      "source": "manual_seed",
+      "brief_schema_version": 1
+    }
+  },
+  {
+    "seed": "SoHo Summer",
+    "subject": "SoHo summer street style",
+    "occasion": "city day outfit",
+    "context_notes": [
+      "Should feel downtown, sharp, and heat-aware",
+      "Outfit needs to work for shopping, coffee, gallery browsing, and dinner plans",
+      "Mix clean basics with one distinctive fashion piece"
+    ],
+    "style_cues": [
+      "city minimalism",
+      "sleek tank or tee",
+      "statement trouser or skirt",
+      "fashion sneaker or sandal",
+      "small shoulder bag"
+    ],
+    "color_cues": [
+      "black",
+      "white",
+      "silver",
+      "butter yellow",
+      "denim blue"
+    ],
+    "required_considerations": [
+      "Keep it walkable for the city",
+      "Include one styling detail that feels downtown rather than generic summer"
+    ],
+    "avoid": [
+      "resort-only pieces",
+      "overly formal officewear",
+      "unwalkable shoes"
+    ],
+    "ranking_score": 50,
+    "status": "active",
+    "metadata": {
+      "source": "manual_seed",
+      "brief_schema_version": 1
+    }
+  },
+  {
+    "seed": "Dark Academia",
+    "subject": "dark academia aesthetic",
+    "occasion": "campus or bookstore outfit",
+    "context_notes": [
+      "Should feel literary, layered, and moody without becoming costume-like",
+      "Relevant references include libraries, old campuses, tweed, loafers, satchels, and structured coats"
+    ],
+    "style_cues": [
+      "layering",
+      "plaid or tweed texture",
+      "loafers",
+      "structured coat",
+      "satchel bag",
+      "collared shirt"
+    ],
+    "color_cues": [
+      "brown",
+      "charcoal",
+      "oxblood",
+      "cream",
+      "forest green"
+    ],
+    "required_considerations": [
+      "Make the outfit wearable, not theatrical",
+      "Include texture or layering as a core styling cue"
+    ],
+    "avoid": [
+      "school uniform costume",
+      "overly warm layers for hot weather unless the brief calls for fall",
+      "one-note all-brown styling"
+    ],
+    "ranking_score": 50,
+    "status": "active",
+    "metadata": {
+      "source": "manual_seed",
+      "brief_schema_version": 1
+    }
+  },
+  {
+    "seed": "Morgan Wallen Concert",
+    "subject": "Morgan Wallen concert",
+    "occasion": "country concert outfit",
+    "context_notes": [
+      "Should reference modern country concert styling without becoming costume-like",
+      "Denim, boots, western belts, trucker hats, and outdoor venue practicality are relevant",
+      "Keep the look current and wearable"
+    ],
+    "style_cues": [
+      "denim",
+      "western boot",
+      "belt detail",
+      "concert-ready top",
+      "outdoor venue layer"
+    ],
+    "color_cues": [
+      "denim blue",
+      "white",
+      "black",
+      "brown leather",
+      "faded red"
+    ],
+    "required_considerations": [
+      "Keep footwear practical for standing at a concert",
+      "Include one country-concert-specific detail without turning it into a costume"
+    ],
+    "avoid": [
+      "cowboy costume styling",
+      "overly delicate shoes",
+      "unsupported claims about the artist"
+    ],
+    "ranking_score": 50,
+    "status": "active",
+    "metadata": {
+      "source": "manual_seed",
+      "brief_schema_version": 1
+    }
+  }
+]

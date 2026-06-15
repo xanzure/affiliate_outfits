@@ -1,0 +1,2 @@
+"""Affiliate Outfits application package."""
+

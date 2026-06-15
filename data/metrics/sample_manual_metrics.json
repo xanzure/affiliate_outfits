@@ -1,0 +1,24 @@
+{
+  "concept_id": "replace-with-concept-id",
+  "collection_window": "manual",
+  "metrics": [
+    {
+      "post_id": "replace-with-tiktok-post-id",
+      "views": 1000,
+      "likes": 70,
+      "comments": 6,
+      "shares": 8,
+      "saves": 12,
+      "clicks": 10
+    },
+    {
+      "post_id": "replace-with-pinterest-post-id",
+      "views": 800,
+      "likes": 20,
+      "comments": 2,
+      "shares": 6,
+      "saves": 30,
+      "clicks": 18
+    }
+  ]
+}

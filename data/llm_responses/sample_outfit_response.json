@@ -1,0 +1,273 @@
+{
+  "outfits": [
+    {
+      "interpretation": {
+        "primary_reference": "Bad Bunny",
+        "used_cues": [
+          "concert",
+          "streetwear",
+          "red white blue color reference",
+          "statement accessories"
+        ],
+        "discarded_cues": [],
+        "rationale": "A concert look anchored in relaxed streetwear and color/accessory cues from the brief."
+      },
+      "outfit": {
+        "title": "Color-Cue Concert Streetwear",
+        "categories": [
+          "top",
+          "bottom",
+          "accessory"
+        ],
+        "colors": [
+          "red",
+          "white",
+          "blue"
+        ],
+        "materials": [
+          "cotton",
+          "nylon"
+        ],
+        "accessories": [
+          "statement sunglasses",
+          "color-block cap"
+        ]
+      },
+      "search_queries": [
+        {
+          "query": "red concert streetwear camp collar shirt",
+          "category": "top",
+          "limit": 1
+        },
+        {
+          "query": "blue relaxed cargo concert pants",
+          "category": "bottom",
+          "limit": 1
+        },
+        {
+          "query": "white statement concert sunglasses",
+          "category": "accessory",
+          "limit": 1
+        }
+      ],
+      "diversity_notes": [
+        "Uses brief-specific color and accessory cues."
+      ]
+    },
+    {
+      "interpretation": {
+        "primary_reference": "Bad Bunny",
+        "used_cues": [
+          "concert",
+          "sporty sunglasses",
+          "relaxed proportions"
+        ],
+        "discarded_cues": [],
+        "rationale": "A sporty concert outfit with a different silhouette from the first look."
+      },
+      "outfit": {
+        "title": "Sporty Oversized Concert Fit",
+        "categories": [
+          "top",
+          "bottom",
+          "shoe",
+          "accessory"
+        ],
+        "colors": [
+          "white",
+          "black",
+          "blue"
+        ],
+        "materials": [
+          "mesh",
+          "cotton"
+        ],
+        "accessories": [
+          "sport sunglasses",
+          "crossbody bag"
+        ]
+      },
+      "search_queries": [
+        {
+          "query": "white oversized mesh concert jersey",
+          "category": "top",
+          "limit": 1
+        },
+        {
+          "query": "black relaxed concert shorts",
+          "category": "bottom",
+          "limit": 1
+        },
+        {
+          "query": "blue sporty sunglasses concert outfit",
+          "category": "accessory",
+          "limit": 1
+        }
+      ],
+      "diversity_notes": [
+        "Uses a sporty silhouette instead of a camp-collar shirt."
+      ]
+    },
+    {
+      "interpretation": {
+        "primary_reference": "Bad Bunny",
+        "used_cues": [
+          "warm-weather concert",
+          "playful accessories",
+          "streetwear"
+        ],
+        "discarded_cues": [],
+        "rationale": "A lighter warm-weather outfit that still keeps the music-event styling."
+      },
+      "outfit": {
+        "title": "Warm-Weather Statement Accessory Look",
+        "categories": [
+          "top",
+          "bottom",
+          "accessory"
+        ],
+        "colors": [
+          "cream",
+          "red",
+          "navy"
+        ],
+        "materials": [
+          "linen",
+          "cotton canvas"
+        ],
+        "accessories": [
+          "statement cap",
+          "stacked bracelets"
+        ]
+      },
+      "search_queries": [
+        {
+          "query": "cream warm weather concert shirt",
+          "category": "top",
+          "limit": 1
+        },
+        {
+          "query": "navy cotton canvas concert shorts",
+          "category": "bottom",
+          "limit": 1
+        },
+        {
+          "query": "red statement cap concert outfit",
+          "category": "accessory",
+          "limit": 1
+        }
+      ],
+      "diversity_notes": [
+        "Uses a lighter palette and accessory focus."
+      ]
+    },
+    {
+      "interpretation": {
+        "primary_reference": "Bad Bunny",
+        "used_cues": [
+          "streetwear",
+          "bold sunglasses",
+          "night concert"
+        ],
+        "discarded_cues": [],
+        "rationale": "A darker concert outfit that can work for an evening show."
+      },
+      "outfit": {
+        "title": "Night Concert Streetwear",
+        "categories": [
+          "top",
+          "bottom",
+          "shoe",
+          "accessory"
+        ],
+        "colors": [
+          "black",
+          "silver",
+          "white"
+        ],
+        "materials": [
+          "denim",
+          "cotton"
+        ],
+        "accessories": [
+          "silver sunglasses",
+          "chain necklace"
+        ]
+      },
+      "search_queries": [
+        {
+          "query": "black concert graphic tee streetwear",
+          "category": "top",
+          "limit": 1
+        },
+        {
+          "query": "black relaxed denim concert pants",
+          "category": "bottom",
+          "limit": 1
+        },
+        {
+          "query": "silver statement sunglasses concert",
+          "category": "accessory",
+          "limit": 1
+        }
+      ],
+      "diversity_notes": [
+        "Adds an evening-leaning option."
+      ]
+    },
+    {
+      "interpretation": {
+        "primary_reference": "Bad Bunny",
+        "used_cues": [
+          "concert",
+          "Puerto Rican color cues",
+          "comfortable footwear"
+        ],
+        "discarded_cues": [],
+        "rationale": "A sneaker-led look with subtle color references and practical concert comfort."
+      },
+      "outfit": {
+        "title": "Sneaker-Led Concert Outfit",
+        "categories": [
+          "top",
+          "bottom",
+          "shoe",
+          "accessory"
+        ],
+        "colors": [
+          "white",
+          "blue",
+          "red"
+        ],
+        "materials": [
+          "cotton",
+          "canvas"
+        ],
+        "accessories": [
+          "color accent cap",
+          "small crossbody"
+        ]
+      },
+      "search_queries": [
+        {
+          "query": "white concert tank streetwear",
+          "category": "top",
+          "limit": 1
+        },
+        {
+          "query": "blue relaxed concert denim shorts",
+          "category": "bottom",
+          "limit": 1
+        },
+        {
+          "query": "red white blue concert sneaker",
+          "category": "shoe",
+          "limit": 1
+        }
+      ],
+      "diversity_notes": [
+        "Centers practical concert footwear."
+      ]
+    }
+  ]
+}
