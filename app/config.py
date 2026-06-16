@@ -64,6 +64,7 @@ class Settings:
     tiktok_brand_organic_toggle: bool = False
     pinterest_access_token: str | None = None
     pinterest_board_id: str | None = None
+    supabase_db_url: str | None = None
 
     @property
     def is_development(self) -> bool:
@@ -107,4 +108,5 @@ def load_settings(env_file: Path | None = None) -> Settings:
         tiktok_brand_organic_toggle=_get_bool(read("TIKTOK_BRAND_ORGANIC_TOGGLE", "false")),
         pinterest_access_token=read("PINTEREST_ACCESS_TOKEN", "") or None,
         pinterest_board_id=read("PINTEREST_BOARD_ID", "") or None,
+        supabase_db_url=read("SUPABASE_DB_URL", "") or None,
     )

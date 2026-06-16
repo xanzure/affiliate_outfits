@@ -2,10 +2,20 @@ import { Concept, Outfit, Product, ProductLayout } from "@/lib/types"
 import { supabase } from "@/lib/supabase"
 
 export async function getConcepts(): Promise<Concept[]> {
+  // Only show concepts that have at least one outfit
+  const { data: outfitConcepts, error: oErr } = await supabase
+    .from("outfits")
+    .select("concept_id")
+
+  if (oErr) throw new Error(`getConcepts outfits: ${oErr.message}`)
+  const conceptsWithOutfits = [...new Set((outfitConcepts ?? []).map((o) => o.concept_id))]
+  if (conceptsWithOutfits.length === 0) return []
+
   const { data, error } = await supabase
     .from("concepts")
     .select("*")
     .eq("status", "active")
+    .in("id", conceptsWithOutfits)
     .order("ranking_score", { ascending: false })
 
   if (error) throw new Error(`getConcepts: ${error.message}`)

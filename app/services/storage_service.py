@@ -3,12 +3,14 @@ from __future__ import annotations
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Union
 
 from app.config import PROJECT_ROOT, Settings, load_settings
+from app.db.pg_connection import PgConnection, connect_postgres
 
 
 SCHEMA_PATH = PROJECT_ROOT / "app/db/schema.sql"
+AnyConnection = Union[sqlite3.Connection, PgConnection]
 
 
 def connect(database_path: Path) -> sqlite3.Connection:
@@ -28,17 +30,30 @@ def initialize_database(database_path: Path) -> None:
         conn.commit()
 
 
+def initialize_postgres(supabase_db_url: str) -> None:
+    schema = (PROJECT_ROOT / "app/db/schema_postgres.sql").read_text(encoding="utf-8")
+    conn = connect_postgres(supabase_db_url)
+    conn.executescript(schema)
+
+
 class StorageService:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or load_settings()
         self.database_path = self.settings.database_path
+        self._supabase_db_url = self.settings.supabase_db_url
 
     def initialize(self) -> None:
-        initialize_database(self.database_path)
+        if self._supabase_db_url:
+            initialize_postgres(self._supabase_db_url)
+        else:
+            initialize_database(self.database_path)
 
     @contextmanager
-    def connection(self) -> Iterator[sqlite3.Connection]:
-        conn = connect(self.database_path)
+    def connection(self) -> Iterator[AnyConnection]:
+        if self._supabase_db_url:
+            conn: AnyConnection = connect_postgres(self._supabase_db_url)
+        else:
+            conn = connect(self.database_path)
         try:
             yield conn
             conn.commit()

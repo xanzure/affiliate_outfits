@@ -74,7 +74,9 @@ class ImageService:
         original_path = self.originals_dir / f"{asset_id}-{safe_image_filename(source_path)}"
         shutil.copy2(source_path, original_path)
 
-        normalized_path, normalized = normalize_image(original_path, self.normalized_dir / original_path.name)
+        # Always output PNG so transparency is preserved after background removal
+        normalized_dest = self.normalized_dir / f"{original_path.stem}.png"
+        normalized_path, normalized = normalize_image(original_path, normalized_dest)
         normalized_info = inspect_image(normalized_path)
 
         return PreparedImage(
@@ -87,7 +89,7 @@ class ImageService:
 
 
 def normalize_image(source_path: Path, destination_path: Path) -> tuple[Path, bool]:
-    """Normalize an image when Pillow is available; otherwise copy it unchanged."""
+    """Normalize and remove background from an image, always saving as PNG."""
 
     try:
         from PIL import Image, ImageOps
@@ -99,9 +101,20 @@ def normalize_image(source_path: Path, destination_path: Path) -> tuple[Path, bo
         image = ImageOps.exif_transpose(image)
         if image.mode not in {"RGB", "RGBA"}:
             image = image.convert("RGBA" if "A" in image.mode else "RGB")
-        image.save(destination_path)
+
+        image = _remove_background(image)
+        destination_path = destination_path.with_suffix(".png")
+        image.save(destination_path, format="PNG")
 
     return destination_path, True
+
+
+def _remove_background(image: "PIL.Image.Image") -> "PIL.Image.Image":
+    try:
+        from rembg import remove
+        return remove(image)
+    except Exception:
+        return image
 
 
 def _image_extension(image_url: str, content_type: str) -> str:
