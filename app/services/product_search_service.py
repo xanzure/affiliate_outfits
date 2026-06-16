@@ -21,7 +21,7 @@ BLOCKED_RETAILER_TERMS = {
     "wish",
     "zaful",
 }
-CONDITIONAL_RETAILER_TERMS = {"shein"}
+CONDITIONAL_RETAILER_TERMS: set[str] = set()  # shein and amazon now allowed
 LOW_STAKES_CATEGORY_TERMS = {
     "accessory",
     "accessories",
@@ -155,6 +155,208 @@ class SerpApiGoogleShoppingProvider:
         return rank_product_results(results, category=category)[:limit]
 
 
+class TavilyProductSearchProvider:
+    """
+    Uses Tavily's web search API to find real product pages.
+    Returns actual retailer URLs with names and prices extracted from results.
+    """
+
+    TAVILY_URL = "https://api.tavily.com/search"
+
+    # Retailers that publish clean product pages worth scraping
+    INCLUDE_DOMAINS = [
+        "asos.com", "revolve.com", "nordstrom.com", "freepeople.com",
+        "urbanoutfitters.com", "anthropologie.com", "cos.com", "stories.com",
+        "zara.com", "mango.com", "hm.com", "uniqlo.com", "gap.com",
+        "lululemon.com", "nike.com", "adidas.com", "newbalance.com",
+        "converse.com", "vans.com", "stevemadden.com", "samedelman.com",
+        "levi.com", "madewell.com", "agolde.com", "frame-store.com",
+        "everlane.com", "reformation.com", "aritzia.com", "theory.com",
+        "bananarepublic.gap.com", "jcrew.com", "ralphlauren.com",
+        "abercrombie.com", "ae.com", "express.com",
+        "shopbop.com", "saksfifthavenue.com", "bloomingdales.com",
+        "net-a-porter.com", "ssense.com", "farfetch.com",
+        "amazon.com", "zappos.com", "dsw.com", "footlocker.com",
+    ]
+
+    def __init__(self, *, api_key: str, timeout_seconds: int = 30) -> None:
+        if not api_key:
+            raise ValueError("TAVILY_API_KEY is required when PRODUCT_SEARCH_PROVIDER=tavily")
+        self.api_key = api_key
+        self.timeout_seconds = timeout_seconds
+
+    def search(
+        self,
+        query: str,
+        *,
+        category: str | None = None,
+        limit: int = 5,
+    ) -> list[ProductSearchResult]:
+        search_query = f"{query} site:product"
+
+        payload = json.dumps({
+            "api_key": self.api_key,
+            "query": search_query,
+            "search_depth": "advanced",
+            "max_results": min(limit * 3, 15),
+            "include_answer": False,
+            "include_images": True,
+            "include_domains": self.INCLUDE_DOMAINS,
+        }).encode("utf-8")
+
+        request = Request(
+            self.TAVILY_URL,
+            data=payload,
+            headers={"Content-Type": "application/json", "User-Agent": "affiliate-outfits/0.1"},
+            method="POST",
+        )
+        with urlopen(request, timeout=self.timeout_seconds) as response:
+            data = json.loads(response.read().decode("utf-8"))
+
+        results = []
+        for item in data.get("results", []):
+            result = self._item_to_result(item, category=category)
+            if result:
+                results.append(result)
+
+        return rank_product_results(results, category=category)[:limit]
+
+    def _item_to_result(
+        self, item: dict[str, Any], *, category: str | None
+    ) -> ProductSearchResult | None:
+        url = item.get("url", "")
+        title = _clean_text(item.get("title")) or ""
+        content = item.get("content", "")
+
+        if not url or not title:
+            return None
+
+        # Hard skip: non-product pages
+        skip_domains = {
+            "pinterest", "reddit", "youtube", "instagram", "tiktok", "wikipedia",
+            "businessinsider", "buzzfeed", "refinery29", "whowhatwear", "byrdie",
+            "lyst", "poshmark", "depop", "ebay", "etsy", "mercari",
+        }
+        netloc = urlparse(url).netloc.lower()
+        if any(d in netloc for d in skip_domains):
+            return None
+
+        # Skip category/search/list pages — we want single product pages
+        path = urlparse(url).path.lower()
+        skip_path_patterns = ["/cat", "/category", "/shop", "/market", "/search", "/guides/", "/c/"]
+        query_string = urlparse(url).query.lower()
+        if any(p in path for p in skip_path_patterns) and not _looks_like_product_url(url):
+            return None
+        if "cid=" in query_string or "cat=" in query_string:
+            return None
+
+        retailer = _retailer_from_url(url)
+        price_cents = _extract_price_from_text(content) or _extract_price_from_text(title)
+
+        # Use Tavily's returned image if available, otherwise scrape
+        image_url = item.get("image") or _scrape_image_url(url)
+
+        return ProductSearchResult(
+            retailer=retailer,
+            name=title,
+            url=url,
+            category=category,
+            image_url=image_url,
+            price_cents=price_cents,
+            currency="USD",
+            source="tavily",
+            metadata={"snippet": content[:200]},
+        )
+
+
+def _looks_like_product_url(url: str) -> bool:
+    """Heuristic: does this URL look like a single product page?"""
+    path = urlparse(url).path.lower()
+    # Product URLs typically have /p/, /dp/, /product/, or a long slug with ID
+    product_signals = ["/p/", "/dp/", "/product/", "/products/", "/item/", "/pd/", "/prd/"]
+    if any(s in path for s in product_signals):
+        return True
+    # Long paths with numbers often indicate product pages
+    import re
+    if re.search(r'/[a-z0-9-]{20,}', path):
+        return True
+    return False
+
+
+def _scrape_image_url(url: str) -> str | None:
+    """Fetch a product page and extract its main product image URL."""
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/537.36 (KHTML, like Gecko) "
+            "Chrome/124.0.0.0 Safari/537.36"
+        ),
+        "Accept": "text/html,application/xhtml+xml,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
+    try:
+        # Try Playwright first — handles JS-heavy retail sites
+        try:
+            from playwright.sync_api import sync_playwright
+            with sync_playwright() as pw:
+                browser = pw.chromium.launch(headless=True)
+                ctx = browser.new_context(user_agent=headers["User-Agent"], locale="en-US")
+                page = ctx.new_page()
+                page.goto(url, wait_until="domcontentloaded", timeout=20000)
+                page.wait_for_timeout(1000)
+                html = page.content()
+                browser.close()
+        except ImportError:
+            req = Request(url, headers=headers)
+            with urlopen(req, timeout=15) as resp:
+                html = resp.read().decode("utf-8", errors="replace")
+
+        return _extract_image_from_html(html)
+    except Exception:
+        return None
+
+
+def _extract_image_from_html(html: str) -> str | None:
+    import re as _re
+    import json as _json
+
+    # JSON-LD product image
+    for block in _re.findall(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', html, _re.S):
+        try:
+            data = _json.loads(block)
+            items = data if isinstance(data, list) else [data]
+            for item in items:
+                if not isinstance(item, dict) or item.get("@type") not in ("Product", "product"):
+                    continue
+                img = item.get("image")
+                if isinstance(img, list): img = img[0]
+                if isinstance(img, dict): img = img.get("url")
+                if img and isinstance(img, str):
+                    return img
+        except Exception:
+            pass
+
+    # OG image
+    m = _re.search(r'<meta[^>]*property="og:image"[^>]*content="([^"]+)"', html, _re.I)
+    if m:
+        return m.group(1).strip()
+
+    # twitter:image
+    m = _re.search(r'<meta[^>]*name="twitter:image"[^>]*content="([^"]+)"', html, _re.I)
+    if m:
+        return m.group(1).strip()
+
+    return None
+
+
+def _extract_price_from_text(text: str) -> int | None:
+    """Pull the first dollar price out of a text snippet."""
+    match = re.search(r"\$\s*([0-9]+(?:\.[0-9]{1,2})?)", text)
+    if match:
+        return round(float(match.group(1)) * 100)
+    return None
+
+
 def product_search_provider_from_settings(settings: Settings | None = None) -> ProductSearchProvider:
     settings = settings or load_settings()
     if settings.product_search_provider in {"google_shopping", "serpapi"}:
@@ -164,6 +366,8 @@ def product_search_provider_from_settings(settings: Settings | None = None) -> P
             gl=settings.google_shopping_gl,
             hl=settings.google_shopping_hl,
         )
+    if settings.product_search_provider == "tavily":
+        return TavilyProductSearchProvider(api_key=settings.tavily_api_key or "")
     if settings.product_search_provider == "fixtures":
         return FixtureProductSearchProvider()
     raise ValueError(f"unsupported PRODUCT_SEARCH_PROVIDER: {settings.product_search_provider}")

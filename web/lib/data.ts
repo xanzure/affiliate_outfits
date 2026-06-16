@@ -22,6 +22,19 @@ export async function getConcepts(): Promise<Concept[]> {
   return (data ?? []).map(rowToConcept)
 }
 
+export async function getOutfitCountsByConcept(): Promise<Record<string, number>> {
+  const { data, error } = await supabase
+    .from("outfits")
+    .select("concept_id")
+
+  if (error) throw new Error(`getOutfitCountsByConcept: ${error.message}`)
+  const counts: Record<string, number> = {}
+  for (const row of data ?? []) {
+    if (row.concept_id) counts[row.concept_id] = (counts[row.concept_id] ?? 0) + 1
+  }
+  return counts
+}
+
 export async function getConcept(id: string): Promise<Concept | null> {
   const { data, error } = await supabase
     .from("concepts")

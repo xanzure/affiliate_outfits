@@ -20,12 +20,20 @@ class LLMPrompt:
 
 
 class ClaudeJSONService:
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(
+        self,
+        settings: Settings | None = None,
+        *,
+        model: str | None = None,
+        thinking_budget: int | None = None,
+    ) -> None:
         self.settings = settings or load_settings()
         if not self.settings.anthropic_api_key:
             raise ValueError(
                 "ANTHROPIC_API_KEY is required for AI agents. Add it to affiliate_outfits/.env."
             )
+        self._model = model or self.settings.anthropic_model
+        self._thinking_budget = thinking_budget
 
     def request_json(self, prompt: LLMPrompt) -> dict:
         try:
@@ -36,9 +44,10 @@ class ClaudeJSONService:
             ) from exc
 
         client = Anthropic(api_key=self.settings.anthropic_api_key)
-        response = client.messages.create(
-            model=self.settings.anthropic_model,
-            max_tokens=4096,
+
+        kwargs: dict = dict(
+            model=self._model,
+            max_tokens=16000 if self._thinking_budget else 4096,
             system=prompt.system,
             messages=[
                 {
@@ -51,6 +60,10 @@ class ClaudeJSONService:
                 }
             ],
         )
+        if self._thinking_budget:
+            kwargs["thinking"] = {"type": "enabled", "budget_tokens": self._thinking_budget}
+
+        response = client.messages.create(**kwargs)
 
         stop_reason = getattr(response, "stop_reason", None)
         if stop_reason == "max_tokens":

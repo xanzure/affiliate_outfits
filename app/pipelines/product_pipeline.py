@@ -47,9 +47,11 @@ def resolve_products_from_searches(
             category=search.category,
             limit=max(search.limit, 5),
         )
+        ranked = rank_product_results(candidates, category=search.category)
+
         stored = _store_product_candidates(
             conn,
-            rank_product_results(candidates, category=search.category),
+            ranked,
             tracking_id=tracking_id,
             affiliate_resolver=affiliate_resolver,
         )

@@ -119,3 +119,21 @@ def update_product_local_image_path(
         (local_image_path, now, product_id),
     )
     return get_product(conn, product_id)
+
+
+def update_product_image_url(
+    conn: sqlite3.Connection,
+    product_id: str,
+    image_url: str,
+) -> Product:
+    now = utc_now()
+    conn.execute(
+        """
+        UPDATE products
+        SET image_url = ?,
+            updated_at = ?
+        WHERE id = ?
+        """,
+        (image_url, now, product_id),
+    )
+    return get_product(conn, product_id)

@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import logging
 import sqlite3
 from pathlib import Path
 
 from app.collage.image_utils import write_solid_png
 from app.db.models import Product
-from app.db.products import update_product_local_image_path
+from app.db.products import update_product_local_image_path, update_product_image_url
+from app.services.asset_storage import SupabaseAssetStorage, asset_storage_from_env
 from app.services.image_service import ImageService, PreparedImage
+
+logger = logging.getLogger(__name__)
 
 
 COLOR_MAP: dict[str, tuple[int, int, int]] = {
@@ -31,34 +35,51 @@ def prepare_product_images(
     products: list[Product],
     *,
     image_service: ImageService | None = None,
+    asset_storage: SupabaseAssetStorage | None = None,
 ) -> list[PreparedImage]:
     service = image_service or ImageService()
+    storage = asset_storage or asset_storage_from_env()
     prepared_images: list[PreparedImage] = []
 
     for product in products:
-        source_path = _source_or_placeholder(product, service)
-        prepared = service.prepare_local_image(source_path, asset_id=product.id)
+        prepared = _prepare_one(product, service)
         update_product_local_image_path(conn, product.id, str(prepared.normalized_path))
+
+        if storage:
+            try:
+                public_url = storage.upload_product_image(product.id, prepared.normalized_path)
+                update_product_image_url(conn, product.id, public_url)
+                logger.info("uploaded %s → %s", product.id, public_url[:80])
+            except Exception:
+                logger.exception("storage upload failed for %s", product.id)
+
         prepared_images.append(prepared)
 
     return prepared_images
 
 
-def _source_or_placeholder(product: Product, service: ImageService) -> Path:
+def _prepare_one(product: Product, service: ImageService) -> PreparedImage:
+    # Already processed locally
     if product.local_image_path:
         path = Path(product.local_image_path)
         if path.exists():
-            return path
+            return service.prepare_local_image(path, asset_id=product.id)
 
+    # Public image URL → Runflow model removal (falls back to rembg)
     if product.image_url:
         try:
-            return service.download_image(product.image_url, asset_id=product.id)
+            return service.process_from_url(product.image_url, asset_id=product.id)
         except Exception:
-            pass
+            logger.warning("process_from_url failed for %s, using placeholder", product.id)
 
+    return _placeholder(product, service)
+
+
+def _placeholder(product: Product, service: ImageService) -> PreparedImage:
     placeholder_path = service.image_dir / "placeholders" / f"{product.id}.png"
     rgb = _product_rgb(product)
-    return write_solid_png(placeholder_path, width=800, height=1000, rgb=rgb)
+    source = write_solid_png(placeholder_path, width=800, height=1000, rgb=rgb)
+    return service.prepare_local_image(source, asset_id=product.id)
 
 
 def _product_rgb(product: Product) -> tuple[int, int, int]:

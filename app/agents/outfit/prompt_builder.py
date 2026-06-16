@@ -22,48 +22,51 @@ def build_outfit_prompt(
         else ""
     )
     return f"""
-You are helping generate a fashion outfit concept for an affiliate content pipeline.
+You are an editorial fashion stylist curating affiliate content for a luxury fashion archive.
 
-Interpret the creative brief with nuance. Do not collapse people, places, songs,
-artists, events, or cultural references into generic outfit labels.
-Generate {outfit_count} distinct outfit{"s" if outfit_count != 1 else ""} for this one concept.
+Your job: interpret the creative brief with precision and taste, then select a cohesive,
+aesthetically sharp outfit. Think like a stylist at Acne Studios or Bottega Veneta —
+quiet confidence, intentional choices, nothing generic.
+
+Generate {outfit_count} distinct outfit{"s" if outfit_count != 1 else ""} for this concept.
+Each must feel like a real editorial choice — not a mood board dump.
 
 Creative brief:
 {json.dumps(brief, indent=2, sort_keys=True)}
 
-Previous related outfits:
+Previous outfits for this concept (do not repeat):
 {json.dumps(history, indent=2, sort_keys=True)}
 
 {schema_intro}
 {{
   "interpretation": {{
-    "primary_reference": "non-empty brief reference being interpreted",
-    "used_cues": ["non-empty cue strings used in the outfit"],
-    "discarded_cues": ["cue strings intentionally not used, or []"],
-    "rationale": "non-empty explanation of how the brief shaped the outfit"
+    "primary_reference": "the specific cultural/aesthetic anchor you are styling around",
+    "used_cues": ["specific cues from the brief that shaped this outfit"],
+    "discarded_cues": ["cues intentionally skipped, or []"],
+    "rationale": "why these pieces together — the story the outfit tells"
   }},
   "outfit": {{
-    "title": "non-empty outfit title",
-    "categories": ["non-empty product categories such as top, bottom, shoe, accessory"],
-    "colors": ["color strings, or []"],
-    "materials": ["material strings, or []"],
-    "accessories": ["accessory strings, or []"]
+    "title": "short editorial outfit title (max 6 words)",
+    "categories": ["exact product types: e.g. wide-leg trousers, leather mule, oversized blazer"],
+    "colors": ["specific color names: e.g. ecru, burnt sienna, slate, ivory"],
+    "materials": ["material descriptors: e.g. linen, washed denim, suede, ribbed knit"],
+    "accessories": ["specific accessories, or []"]
   }},
   "search_queries": [
     {{
-      "query": "non-empty retailer search phrase that preserves brief nuance",
-      "category": "optional category string",
+      "query": "specific product search term — include material, color, silhouette, and retailer name where possible.",
+      "category": "exact category string matching outfit.categories",
       "limit": 1
     }}
   ],
-  "diversity_notes": ["strings, or []"]
+  "diversity_notes": ["how this outfit differs from the others in the batch, or []"]
 }}
 
 Rules:
-- Include at least one search query.
-- Use query objects, not just labels, so deterministic product matching can continue.
-- Keep each query product-searchable; do not write abstract descriptions only.
-- Preserve brief-specific nuance in at least one search query or cue.
-- The outfits must be meaningfully different from each other while still matching the same concept.
+- Every outfit must be COMPLETE: at minimum top + bottom + shoe. Accessories are optional but encouraged.
+- Each search query must be highly specific. Bad: "black coat". Good: "oversized black wool coat women ASOS".
+- Colors and materials must be specific — avoid "neutral" or "casual" as descriptors.
+- The outfits must differ meaningfully in silhouette, color story, or mood — not just swap one piece.
+- Do NOT choose generic items. Every piece should feel intentionally chosen for this specific concept.
 {wrapper_note}
 """.strip()

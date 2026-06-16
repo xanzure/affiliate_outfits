@@ -1,11 +1,14 @@
-import { getConcepts, getOutfitsForConcept } from "@/lib/data"
+import { getConcepts, getOutfitCountsByConcept } from "@/lib/data"
 import ConceptCard from "@/components/ConceptCard"
 
+export const revalidate = 60
+
 export default async function HomePage() {
-  const concepts = await getConcepts()
-  const outfitCounts = await Promise.all(
-    concepts.map((c) => getOutfitsForConcept(c.id).then((o) => o.length))
-  )
+  const [concepts, outfitCountMap] = await Promise.all([
+    getConcepts(),
+    getOutfitCountsByConcept(),
+  ])
+  const outfitCounts = concepts.map((c) => outfitCountMap[c.id] ?? 0)
 
   return (
     <main className="min-h-screen bg-[#f5f2ee] px-6 py-16 sm:px-12 lg:px-20">

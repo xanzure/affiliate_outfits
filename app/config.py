@@ -49,6 +49,8 @@ class Settings:
     anthropic_model: str = "claude-haiku-4-5"
     product_search_provider: str = "fixtures"
     serpapi_api_key: str | None = None
+    tavily_api_key: str | None = None
+    runflow_api_key: str | None = None
     google_shopping_location: str = "United States"
     google_shopping_gl: str = "us"
     google_shopping_hl: str = "en"
@@ -93,6 +95,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
         anthropic_model=read("ANTHROPIC_MODEL", "claude-haiku-4-5"),
         product_search_provider=read("PRODUCT_SEARCH_PROVIDER", "fixtures").lower(),
         serpapi_api_key=read("SERPAPI_API_KEY", "") or None,
+        tavily_api_key=read("TAVILY_API_KEY", "") or None,
+        runflow_api_key=read("RUNFLOW_API_KEY", "") or None,
         google_shopping_location=read("GOOGLE_SHOPPING_LOCATION", "United States"),
         google_shopping_gl=read("GOOGLE_SHOPPING_GL", "us"),
         google_shopping_hl=read("GOOGLE_SHOPPING_HL", "en"),

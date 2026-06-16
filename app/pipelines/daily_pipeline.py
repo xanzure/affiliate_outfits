@@ -5,9 +5,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from app.agents.collage.style_agent import BatchVisualStyle, generate_batch_visual_style
 from app.agents.outfit.parser import normalize_outfit_agent_output, normalize_outfit_agent_outputs
 from app.agents.engagement.agent import generate_engagement_with_llm
-from app.agents.outfit.agent import generate_outfit_batch_with_llm, generate_outfit_with_llm
+from app.agents.outfit.agent import generate_outfit_batch_with_llm, generate_outfit_with_llm, curate_outfit_products_with_feedback
+from app.agents.outfit.curator import outfit_spec_to_pipeline_format
 from app.config import Settings, load_settings
 from app.db.collages import create_collage
 from app.db.concepts import get_concept, update_concept_metadata
@@ -21,10 +23,7 @@ from app.pipelines.publish_pipeline import (
     create_local_publish_records,
     create_local_publish_records_for_outfit_set,
 )
-from app.pipelines.product_pipeline import (
-    resolve_products_from_searches,
-    search_specs_from_agent_output,
-)
+from app.pipelines.product_pipeline import resolve_products_from_searches
 from app.scheduler import ScheduledConcept, mark_scheduled_concept_posted
 from app.services.image_service import ImageService, PreparedImage
 
@@ -72,10 +71,9 @@ def run_daily_for_brief(
     )
     outfit_output = normalize_outfit_agent_output(outfit_output)
 
-    searches = search_specs_from_agent_output(outfit_output)
-    products = resolve_products_from_searches(
+    products = curate_outfit_products_with_feedback(
         conn,
-        searches,
+        outfit_output,
         tracking_id=f"concept-{scheduled_brief.concept_id}",
         settings=settings,
     )
@@ -95,19 +93,32 @@ def run_daily_for_brief(
         products,
         image_service=ImageService(settings),
     )
+    batch_style = generate_batch_visual_style(scheduled_brief.seed)
+    categories = [p.category for p in products]
     collage_export = render_collage_manifest_for_images(
         prepared_images,
         output_name=f"{outfit.id}.png",
         settings=settings,
+        style=batch_style,
+        concept_name=scheduled_brief.seed,
+        outfit_number=1,
+        categories=categories,
     )
+    style_meta = {
+        "background_hex": batch_style.background_hex,
+        "accent_hex": batch_style.accent_hex,
+        "font_style": batch_style.font_style,
+        "palette_name": batch_style.palette_name,
+    }
     collage = create_collage(
         conn,
         outfit_id=outfit.id,
         image_path=str(collage_export.image_path),
         layout=_collage_manifest_with_products(collage_export.manifest, products),
         metadata={
-            "renderer": "deterministic_grid",
+            "renderer": "scattered",
             "source": "daily_pipeline",
+            **style_meta,
         },
     )
     outfit = update_outfit_spec(
@@ -168,6 +179,9 @@ def run_daily_outfit_set_for_concept(
         )
     )
 
+    # Generate visual style once for the whole batch
+    batch_style = generate_batch_visual_style(scheduled_concept.seed)
+
     outfit_results: list[DailyOutfitResult] = []
     for index, outfit_output in enumerate(outfit_outputs, start=1):
         outfit_results.append(
@@ -177,6 +191,8 @@ def run_daily_outfit_set_for_concept(
                 outfit_output,
                 output_name_suffix=f"{index}",
                 settings=settings,
+                batch_style=batch_style,
+                outfit_number=index,
             )
         )
 
@@ -226,11 +242,12 @@ def _materialize_outfit_output(
     *,
     output_name_suffix: str,
     settings: Settings,
+    batch_style: BatchVisualStyle | None = None,
+    outfit_number: int = 1,
 ) -> DailyOutfitResult:
-    searches = search_specs_from_agent_output(outfit_output)
-    products = resolve_products_from_searches(
+    products = curate_outfit_products_with_feedback(
         conn,
-        searches,
+        outfit_output,
         tracking_id=f"concept-{scheduled_concept.concept_id}",
         settings=settings,
     )
@@ -252,19 +269,33 @@ def _materialize_outfit_output(
         products,
         image_service=ImageService(settings),
     )
+    categories = [p.category for p in products]
     collage_export = render_collage_manifest_for_images(
         prepared_images,
         output_name=f"{outfit.id}-{output_name_suffix}.png",
         settings=settings,
+        style=batch_style,
+        concept_name=scheduled_concept.seed,
+        outfit_number=outfit_number,
+        categories=categories,
     )
+    style_meta = {}
+    if batch_style:
+        style_meta = {
+            "background_hex": batch_style.background_hex,
+            "accent_hex": batch_style.accent_hex,
+            "font_style": batch_style.font_style,
+            "palette_name": batch_style.palette_name,
+        }
     collage = create_collage(
         conn,
         outfit_id=outfit.id,
         image_path=str(collage_export.image_path),
         layout=_collage_manifest_with_products(collage_export.manifest, products),
         metadata={
-            "renderer": "deterministic_grid",
+            "renderer": "scattered",
             "source": "daily_pipeline",
+            **style_meta,
         },
     )
     outfit = update_outfit_spec(

@@ -54,12 +54,11 @@ export default function OutfitCanvas({ outfit, index }: Props) {
               }}
             >
               <div className="relative transition-all duration-200 group-hover:scale-105">
-                <div className="absolute inset-0 rounded-sm opacity-0 group-hover:opacity-100 transition-opacity duration-200 shadow-[0_0_20px_6px_rgba(255,255,255,0.7)]" />
                 {product.image_url ? (
                   <img
                     src={product.image_url}
                     alt={product.name}
-                    className="w-full h-auto object-contain drop-shadow-md"
+                    className="w-full h-auto object-contain transition-[filter] duration-200 drop-shadow-md group-hover:[filter:drop-shadow(0_0_8px_rgba(255,255,255,0.95))_drop-shadow(0_0_16px_rgba(255,255,255,0.6))]"
                     draggable={false}
                   />
                 ) : (
