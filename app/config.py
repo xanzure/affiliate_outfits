@@ -55,6 +55,8 @@ class Settings:
     google_shopping_gl: str = "us"
     google_shopping_hl: str = "en"
     affiliate_provider: str = "none"
+    awin_oauth2_token: str | None = None
+    awin_publisher_id: str | None = None
     autoposting_enabled: bool = False
     public_asset_base_url: str | None = None
     tiktok_access_token: str | None = None
@@ -101,6 +103,8 @@ def load_settings(env_file: Path | None = None) -> Settings:
         google_shopping_gl=read("GOOGLE_SHOPPING_GL", "us"),
         google_shopping_hl=read("GOOGLE_SHOPPING_HL", "en"),
         affiliate_provider=read("AFFILIATE_PROVIDER", "none").lower(),
+        awin_oauth2_token=read("AWIN_OAUTH2_TOKEN", "") or None,
+        awin_publisher_id=read("AWIN_PUBLISHER_ID", "") or None,
         autoposting_enabled=_get_bool(read("AUTOPOSTING_ENABLED", "false")),
         public_asset_base_url=read("PUBLIC_ASSET_BASE_URL", "").rstrip("/") or None,
         tiktok_access_token=read("TIKTOK_ACCESS_TOKEN", "") or None,

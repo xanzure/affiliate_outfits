@@ -51,28 +51,30 @@ class JsonLLMAgentTests(unittest.TestCase):
 
         self.assertIn("Bad Bunny summer concert outfit", prompt)
         self.assertIn("Puerto Rican cultural references are relevant", prompt)
-        self.assertIn("Do not collapse", prompt)
+        self.assertIn("not a mood board dump", prompt)
 
     def test_outfit_agent_uses_llm_service(self) -> None:
+        # Curator returns an `outfits` array; each outfit carries items + metadata.
         service = FakeLLMService(
             {
-                "interpretation": {
-                    "primary_reference": "Bad Bunny",
-                    "used_cues": ["streetwear"],
-                    "discarded_cues": [],
-                    "rationale": "Uses the artist and concert context.",
-                },
-                "outfit": {
-                    "title": "Summer concert streetwear",
-                    "categories": ["top"],
-                    "colors": ["white"],
-                    "materials": [],
-                    "accessories": [],
-                },
-                "search_queries": [
-                    {"query": "white concert streetwear top", "category": "top", "limit": 1}
-                ],
-                "diversity_notes": [],
+                "outfits": [
+                    {
+                        "title": "Summer concert streetwear",
+                        "rationale": "Uses the artist and concert context.",
+                        "primary_reference": "Bad Bunny",
+                        "items": [
+                            {
+                                "role": "statement top",
+                                "category": "top",
+                                "color": "white",
+                                "material": "cotton",
+                                "search_query": "white concert streetwear top",
+                                "use_cached_url": None,
+                                "price_range": "mid",
+                            }
+                        ],
+                    }
+                ]
             }
         )
 
@@ -82,7 +84,7 @@ class JsonLLMAgentTests(unittest.TestCase):
         )
 
         self.assertEqual(result["interpretation"]["primary_reference"], "Bad Bunny")
-        self.assertIn("Outfit Agent", service.prompts[0].title)
+        self.assertIn("Outfit Curator", service.prompts[0].title)
 
 
 if __name__ == "__main__":

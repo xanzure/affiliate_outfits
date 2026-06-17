@@ -131,9 +131,11 @@ class RetailerServiceTests(unittest.TestCase):
             finally:
                 conn.close()
 
-    def test_retailer_policy_blocks_suspicious_retailers_but_allows_shein_accessories(self) -> None:
+    def test_retailer_policy_blocks_unsafe_retailers_but_allows_shein(self) -> None:
+        # Hard-blocked dropship retailers stay blocked across all categories.
         self.assertFalse(is_allowed_retailer("Temu", "https://temu.com/item", category="top"))
-        self.assertFalse(is_allowed_retailer("SHEIN", "https://shein.com/dress", category="dress"))
+        # SHEIN is now allowed for every category (no longer conditional).
+        self.assertTrue(is_allowed_retailer("SHEIN", "https://shein.com/dress", category="dress"))
         self.assertTrue(is_allowed_retailer("SHEIN", "https://shein.com/hat", category="hat"))
 
     def test_rank_product_results_prefers_cheaper_safe_items(self) -> None:

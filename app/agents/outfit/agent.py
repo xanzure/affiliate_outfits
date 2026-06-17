@@ -18,7 +18,7 @@ from app.services.llm_service import ClaudeJSONService
 
 log = logging.getLogger(__name__)
 
-_MAX_REVIEW_ROUNDS = 3
+_MAX_REVIEW_ROUNDS = 1
 
 
 def generate_outfit_with_llm(
@@ -26,9 +26,10 @@ def generate_outfit_with_llm(
     history: list[dict[str, Any]] | None = None,
     *,
     llm_service: ClaudeJSONService | None = None,
+    cached_products: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     service = llm_service or make_curator_service()
-    specs = generate_outfit_specs(brief, 1, history or [], service=service)
+    specs = generate_outfit_specs(brief, 1, history or [], service=service, cached_products=cached_products)
     return normalize_outfit_agent_output(outfit_spec_to_pipeline_format(specs[0]))
 
 
@@ -38,9 +39,10 @@ def generate_outfit_batch_with_llm(
     *,
     outfit_count: int,
     llm_service: ClaudeJSONService | None = None,
+    cached_products: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
     service = llm_service or make_curator_service()
-    specs = generate_outfit_specs(brief, outfit_count, history or [], service=service)
+    specs = generate_outfit_specs(brief, outfit_count, history or [], service=service, cached_products=cached_products)
     return normalize_outfit_agent_outputs(
         {"outfits": [outfit_spec_to_pipeline_format(s) for s in specs]},
         expected_count=outfit_count,
@@ -62,6 +64,7 @@ def curate_outfit_products_with_feedback(
     from app.pipelines.product_pipeline import (
         ProductSearchSpec,
         resolve_products_from_searches,
+        resolve_cached_product,
     )
     from app.config import load_settings
 
@@ -75,21 +78,32 @@ def curate_outfit_products_with_feedback(
     for round_num in range(1, _MAX_REVIEW_ROUNDS + 1):
         log.info("Curator search round %d/%d", round_num, _MAX_REVIEW_ROUNDS)
 
-        search_specs = [
-            ProductSearchSpec(
-                query=q["query"],
-                category=q.get("category"),
-                limit=q.get("limit", 5),
-            )
-            for q in current_queries
-        ]
+        products: list[Product] = []
+        search_specs = []
 
-        products = resolve_products_from_searches(
+        for q in current_queries:
+            cached_url = q.get("use_cached_url")
+            if cached_url:
+                cached = resolve_cached_product(conn, cached_url)
+                if cached:
+                    log.info("  Using cached product: %s", cached.name[:60])
+                    products.append(cached)
+                    continue
+            search_specs.append(
+                ProductSearchSpec(
+                    query=q["query"],
+                    category=q.get("category"),
+                    limit=q.get("limit", 5),
+                )
+            )
+
+        searched = resolve_products_from_searches(
             conn,
             search_specs,
             tracking_id=tracking_id,
             settings=settings,
         )
+        products.extend(searched)
 
         if not products:
             log.warning("No products found in round %d", round_num)

@@ -23,22 +23,19 @@ class CollagePipelineTests(unittest.TestCase):
         self.assertEqual(layout.placements[1].x, 510)
         self.assertEqual(layout.placements[2].y, 510)
 
-    def test_export_collage_writes_canvas_sized_png(self) -> None:
+    def test_export_collage_writes_fixed_editorial_canvas_png(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             first = write_solid_png(root / "first.png", width=100, height=100, rgb=(255, 0, 0))
             second = write_solid_png(root / "second.png", width=100, height=100, rgb=(0, 0, 255))
             output = root / "collage.png"
 
-            export_collage(
-                [first, second],
-                output,
-                canvas=Canvas(width=320, height=400, padding=20, gap=10),
-            )
+            # The renderer composes onto a fixed 1080x1350 editorial canvas.
+            export_collage([first, second], output)
             info = inspect_image(output)
 
-            self.assertEqual(info.width, 320)
-            self.assertEqual(info.height, 400)
+            self.assertEqual(info.width, 1080)
+            self.assertEqual(info.height, 1350)
 
     def test_render_collage_for_images_uses_prepared_images(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:

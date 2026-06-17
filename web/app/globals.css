@@ -1,15 +1,28 @@
 @import "tailwindcss";
 
 :root {
-  --background: #f5f2ee;
-  --foreground: #1c1917;
+  --background: #f3efe9;
+  --foreground: #211c1a;
+  --surface: #faf8f4;
+  --canvas: #ebe5db;
+  --accent: #9a6f4a;        /* warm bronze */
+  --accent-soft: #c9a878;
+  --muted: #8a8178;
+  --line: #ddd6ca;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-surface: var(--surface);
+  --color-canvas: var(--canvas);
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-muted: var(--muted);
+  --color-line: var(--line);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  --font-serif: var(--font-cormorant);
 }
 
 body {
@@ -18,3 +31,16 @@ body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
+
+/* soft warm paper vignette for large surfaces */
+.paper-vignette {
+  background:
+    radial-gradient(120% 70% at 50% -10%, rgba(255, 255, 255, 0.55), transparent 55%),
+    radial-gradient(100% 90% at 50% 120%, rgba(154, 111, 74, 0.07), transparent 60%);
+}
+
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-up { animation: fadeUp 0.7s cubic-bezier(0.22, 1, 0.36, 1) both; }

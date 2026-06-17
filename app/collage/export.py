@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import random
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -31,18 +32,42 @@ _FONTS: dict[str, dict[str, str]] = {
     },
 }
 
-# ── category zone definitions ──────────────────────────────────────────────────
-# Each zone: (center_x, center_y, target_width, base_rotation_deg)
-# cx/cy are pixel positions in the content area (0,0) = top-left of canvas
-_ZONES: dict[str, tuple[int, int, int, float]] = {
-    "outerwear": (540, 290, 460,  0.0),
-    "top":       (340, 270, 370, -5.0),
-    "bottom":    (490, 660, 370,  4.0),
-    "dress":     (540, 440, 420, -3.0),
-    "shoe":      (490, 950, 250,  8.0),
-    "bag":       (820, 590, 250, -6.0),
-    "accessory": (210, 710, 180,  7.0),
+# ── visual hierarchy ────────────────────────────────────────────────────────────
+# Items are arranged in two columns: an "apparel" column (garments stacked
+# head-to-toe) and an "accessories" column (bag / shoe / jewelry). Each item is
+# scaled to FIT a box (preserving aspect ratio) whose height is proportional to
+# the item's visual weight — so a dress reads large, earrings read small, and
+# nothing balloons just because the source image happens to be wide.
+
+# Relative vertical weight of each zone within its column
+_TIER_WEIGHT: dict[str, float] = {
+    "outerwear": 3.0,
+    "dress":     3.0,
+    "top":       2.0,
+    "bottom":    2.0,
+    "bag":       1.7,
+    "shoe":      1.5,
+    "accessory": 1.0,
 }
+
+# Max width an item may occupy, as a fraction of its column width
+_TIER_MAX_WIDTH: dict[str, float] = {
+    "outerwear": 1.00,
+    "dress":     0.94,
+    "top":       0.90,
+    "bottom":    0.90,
+    "bag":       0.95,
+    "shoe":      0.66,
+    "accessory": 0.58,
+}
+
+# Which column each zone belongs to
+_APPAREL_ZONES = {"outerwear", "top", "bottom", "dress"}
+_EXTRA_ZONES = {"bag", "shoe", "accessory"}
+
+# Stacking order within a column (head-to-toe / bag-to-shoe)
+_APPAREL_ORDER = {"outerwear": 0, "top": 1, "dress": 1, "bottom": 2}
+_EXTRA_ORDER = {"bag": 0, "accessory": 1, "shoe": 2}
 
 # How to normalise category strings → zone keys
 _CATEGORY_MAP: dict[str, str] = {
@@ -77,10 +102,6 @@ _CATEGORY_MAP: dict[str, str] = {
     "sunglasses": "accessory", "glasses": "accessory", "watch": "accessory",
     "sock": "accessory", "socks": "accessory",
 }
-
-# Conflict offsets when multiple items share a zone (alternate left/right/up/down)
-_CONFLICT_OFFSETS = [(-90, 0), (90, 0), (0, -70), (0, 70)]
-
 
 @dataclass(frozen=True)
 class CollageExportResult:
@@ -124,7 +145,7 @@ def export_collage(
     collage = Image.new("RGBA", (CANVAS_W, CANVAS_H), (*bg_rgb, 255))
     rng = random.Random(_rng_seed(seed or output_path.name))
 
-    placements = _compute_placements(
+    placements = _compute_layout(
         image_paths,
         categories or [None] * len(image_paths),
         rng,
@@ -133,15 +154,15 @@ def export_collage(
     # (canvas_x, canvas_y, render_w, render_h, rotation) for web layout
     placed_bboxes: list[tuple[int, int, int, int, float]] = []
 
-    for img_path, (cx, cy, rotation, target_w) in zip(image_paths, placements):
+    for img_path, (cx, cy, box_w, box_h, rotation) in zip(image_paths, placements):
         with Image.open(img_path) as img:
             img = img.convert("RGBA")
-            scale = target_w / img.width
-            new_w = target_w
-            new_h = int(img.height * scale)
-            if new_h > int(CONTENT_H * 0.62):
-                new_h = int(CONTENT_H * 0.62)
-                new_w = int(img.width * new_h / img.height)
+            img = _trim_alpha(img)
+            # Scale to FIT the box, preserving aspect ratio (no distortion,
+            # no ballooning — whichever dimension binds first wins)
+            scale = min(box_w / img.width, box_h / img.height)
+            new_w = max(1, int(round(img.width * scale)))
+            new_h = max(1, int(round(img.height * scale)))
             img = img.resize((new_w, new_h), Image.LANCZOS)
 
             rotated = img.rotate(
@@ -167,55 +188,189 @@ def export_collage(
 
 # ── placement logic ────────────────────────────────────────────────────────────
 
-def _compute_placements(
+# Layout geometry
+_PAD = 70                 # outer margin
+_ITEM_GAP = 26            # vertical gap between stacked items in a column
+_SPINE_FRACTION = 0.42    # share of usable width for the central apparel+shoe spine
+_FLANK_GAP = 30           # gap between the spine and a side flank
+_APPAREL_ROT = 2.5        # max rotation (deg) for garments + shoes
+_ACCESSORY_ROT = 6.0      # max rotation (deg) for accessories — slightly tilted
+
+# Where an accessory sits vertically on a flank, by where it's worn on the body
+# (fraction of usable height for the item's centre). Jewelry / head items ride high.
+_FLANK_ANCHOR: dict[str, float] = {"accessory": 0.20, "bag": 0.48}
+# Target height of a flank accessory (fraction of usable height)
+_FLANK_HEIGHT: dict[str, float] = {"accessory": 0.18, "bag": 0.34}
+
+
+def _place_flank(
+    items: list[int],
+    *,
+    flank_w: int,
+    flank_cx: int,
+    y0: int,
+    usable_h: int,
+    zones: list[str],
+    rng: random.Random,
+) -> list[tuple[int, tuple[int, int, int, int, float]]]:
+    """Place flank accessories at a body-appropriate height (head items high),
+    stacking downward to avoid collisions when a side holds more than one."""
+    out: list[tuple[int, tuple[int, int, int, int, float]]] = []
+    ordered = sorted(items, key=lambda i: _FLANK_ANCHOR.get(zones[i], 0.4))
+    prev_bottom = y0
+    for i in ordered:
+        z = zones[i]
+        box_w = int(flank_w * _TIER_MAX_WIDTH[z])
+        box_h = int(usable_h * _FLANK_HEIGHT.get(z, 0.20))
+        cy = int(y0 + _FLANK_ANCHOR.get(z, 0.40) * usable_h)
+        if cy - box_h // 2 < prev_bottom + _ITEM_GAP:
+            cy = prev_bottom + _ITEM_GAP + box_h // 2
+        cx = flank_cx + rng.randint(-8, 8)
+        out.append((i, (cx, cy, box_w, box_h, rng.uniform(-_ACCESSORY_ROT, _ACCESSORY_ROT))))
+        prev_bottom = cy + box_h // 2
+    return out
+
+
+def _stack_column(
+    items: list[int],
+    *,
+    col_w: int,
+    col_cx: int,
+    y0: int,
+    avail_h: float,
+    zones: list[str],
+    rng: random.Random,
+    max_rot: float,
+    order_map: dict[str, int] | None = None,
+) -> list[tuple[int, tuple[int, int, int, int, float]]]:
+    """Stack items vertically in a column, each given a weight-proportional cell."""
+    if not items:
+        return []
+    ordered = (
+        sorted(items, key=lambda i: (order_map.get(zones[i], 9), i))
+        if order_map else items
+    )
+    weights = [_TIER_WEIGHT[zones[i]] for i in ordered]
+    weight_sum = sum(weights) or 1.0
+    avail = avail_h - _ITEM_GAP * (len(ordered) - 1)
+
+    out: list[tuple[int, tuple[int, int, int, int, float]]] = []
+    y = y0
+    for i, w in zip(ordered, weights):
+        cell_h = avail * (w / weight_sum)
+        box_h = int(cell_h)
+        box_w = int(col_w * _TIER_MAX_WIDTH[zones[i]])
+        cx = col_cx + rng.randint(-8, 8)
+        cy = int(y + cell_h / 2)
+        out.append((i, (cx, cy, box_w, box_h, rng.uniform(-max_rot, max_rot))))
+        y += cell_h + _ITEM_GAP
+    return out
+
+
+def _compute_layout(
     image_paths: list[Path],
     categories: list[str | None],
     rng: random.Random,
-) -> list[tuple[int, int, float, int]]:
+) -> list[tuple[int, int, int, int, float]]:
     """
-    Returns (center_x, center_y, rotation_deg, target_width) for each item,
-    using zone-based positioning when categories are available, scattered
-    fallback otherwise.
+    Returns (center_x, center_y, box_w, box_h, rotation_deg) for each item.
+
+    Layout mirrors a classic outfit flat-lay:
+      • a central vertical SPINE: garments stacked head-to-toe, then shoes —
+        so the shoes sit in line directly beneath the top and bottom
+      • ACCESSORIES (bag / jewelry / hat) flank the spine on BOTH sides,
+        balanced left and right, with a slight tilt for an editorial feel
+    Each item is scaled to FIT a bounding box whose height is proportional to its
+    visual weight, so proportions stay sane and items never overlap.
     """
-    zone_counts: dict[str, int] = {}
-    result: list[tuple[int, int, float, int]] = []
+    n = len(image_paths)
+    usable_x0, usable_y0 = _PAD, _PAD
+    usable_x1, usable_y1 = CANVAS_W - _PAD, CONTENT_H - 40
+    usable_w = usable_x1 - usable_x0
+    usable_h = usable_y1 - usable_y0
 
-    for i, (img_path, cat) in enumerate(zip(image_paths, categories)):
-        zone_key = _resolve_zone(cat)
-        count = zone_counts.get(zone_key, 0)
-        zone_counts[zone_key] = count + 1
+    zones = [_resolve_zone(c) for c in categories]
+    shoes = [i for i in range(n) if zones[i] == "shoe"]
+    apparel = [i for i in range(n) if zones[i] in _APPAREL_ZONES]
+    accessories = [i for i in range(n) if zones[i] in _EXTRA_ZONES and zones[i] != "shoe"]
 
-        cx, cy, target_w, base_rot = _ZONES[zone_key]
+    placements: list[tuple[int, int, int, int, float] | None] = [None] * n
 
-        # Offset when multiple items share the same zone
-        if count > 0 and count <= len(_CONFLICT_OFFSETS):
-            ox, oy = _CONFLICT_OFFSETS[count - 1]
-            cx += ox
-            cy += oy
+    # Central spine: apparel head-to-toe, then shoes in line beneath them
+    spine_items = (
+        sorted(apparel, key=lambda i: (_APPAREL_ORDER.get(zones[i], 9), i)) + shoes
+    )
+    # If there's nothing for the spine, let accessories occupy the centre instead
+    if not spine_items and accessories:
+        spine_items, accessories = accessories, []
 
-        # Small random nudge for organic feel
-        cx += rng.randint(-28, 28)
-        cy += rng.randint(-20, 20)
-        rotation = base_rot + rng.uniform(-3.0, 3.0)
+    spine_w = int(usable_w * _SPINE_FRACTION)
+    spine_cx = (usable_x0 + usable_x1) // 2
+    for i, p in _stack_column(
+        spine_items, col_w=spine_w, col_cx=spine_cx, y0=usable_y0,
+        avail_h=usable_h, zones=zones, rng=rng, max_rot=_APPAREL_ROT,
+    ):
+        placements[i] = p
 
-        # Clamp so items stay on canvas
-        cx = max(target_w // 2 + 20, min(CANVAS_W - target_w // 2 - 20, cx))
-        cy = max(80, min(CONTENT_H - 80, cy))
+    # Accessories: split across left and right flanks, slightly tilted
+    if accessories:
+        spine_left = spine_cx - spine_w // 2
+        spine_right = spine_cx + spine_w // 2
+        left_cx = (usable_x0 + spine_left - _FLANK_GAP) // 2
+        right_cx = (spine_right + _FLANK_GAP + usable_x1) // 2
+        left_w = max(150, spine_left - _FLANK_GAP - usable_x0)
+        right_w = max(150, usable_x1 - spine_right - _FLANK_GAP)
 
-        result.append((cx, cy, rotation, target_w))
+        acc_sorted = sorted(accessories, key=lambda i: (_EXTRA_ORDER.get(zones[i], 9), i))
+        right_items = acc_sorted[0::2]   # alternate: 1st, 3rd … on the right
+        left_items = acc_sorted[1::2]    #            2nd, 4th … on the left
 
-    return result
+        for items, fw, fcx in (
+            (right_items, right_w, right_cx),
+            (left_items, left_w, left_cx),
+        ):
+            for i, p in _place_flank(
+                items, flank_w=fw, flank_cx=fcx, y0=usable_y0,
+                usable_h=usable_h, zones=zones, rng=rng,
+            ):
+                placements[i] = p
+
+    # Safety: any item that somehow wasn't placed gets a centered fallback box
+    for i in range(n):
+        if placements[i] is None:
+            placements[i] = (CANVAS_W // 2, CONTENT_H // 2, 300, 300, 0.0)
+
+    return placements  # type: ignore[return-value]
+
+
+def _trim_alpha(img: "Image.Image") -> "Image.Image":
+    """Crop fully-transparent borders so fit-to-box sizing is accurate."""
+    bbox = img.getbbox()
+    if bbox:
+        return img.crop(bbox)
+    return img
 
 
 def _resolve_zone(category: str | None) -> str:
-    """Map a free-text category string to one of the defined zone keys."""
+    """Map a free-text category string to one of the defined zone keys.
+
+    The head noun of a fashion descriptor is almost always the LAST word
+    ("woven straw crossbody BAG", "platform strappy SANDAL", "chunky hoop
+    EARRINGS"), so we scan words from the end. This avoids ambiguous modifiers
+    like "mini"/"maxi" hijacking the match (e.g. "mini ... bag" → dress).
+    """
     if not category:
         return "accessory"
     cat_lower = category.lower().strip()
-    # Direct match
+    # Direct full-string match
     if cat_lower in _CATEGORY_MAP:
         return _CATEGORY_MAP[cat_lower]
-    # Partial match — check if any map key appears in the category string
+    # Scan words from the end — head noun is the strongest signal
+    words = re.findall(r"[a-z]+", cat_lower)
+    for word in reversed(words):
+        if word in _CATEGORY_MAP:
+            return _CATEGORY_MAP[word]
+    # Last resort: any substring match anywhere
     for key, zone in _CATEGORY_MAP.items():
         if key in cat_lower:
             return zone

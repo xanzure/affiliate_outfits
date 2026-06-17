@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Cormorant_Garamond } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 
@@ -11,6 +11,13 @@ const geistSans = Geist({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+const cormorant = Cormorant_Garamond({
+  variable: "--font-cormorant",
+  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
+  style: ["normal", "italic"],
 });
 
 export const metadata: Metadata = {
@@ -26,20 +33,55 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${cormorant.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">
-        {children}
-        <footer className="mt-auto px-6 py-10 sm:px-12 lg:px-20 flex gap-8 items-center justify-center border-t border-stone-200">
-          <Link href="/terms" className="text-xs tracking-widest text-stone-300 uppercase hover:text-stone-500 transition-colors">
-            Terms
-          </Link>
-          <Link href="/privacy" className="text-xs tracking-widest text-stone-300 uppercase hover:text-stone-500 transition-colors">
-            Privacy
-          </Link>
-          <span className="text-xs tracking-widest text-stone-200 uppercase">
-            © {new Date().getFullYear()} Vance Archives
-          </span>
+      <body className="min-h-full flex flex-col bg-background text-foreground">
+        <header className="sticky top-0 z-40 border-b border-line/70 bg-background/75 backdrop-blur-md">
+          <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-3.5 sm:px-12 lg:px-20">
+            <Link href="/" className="group flex items-center">
+              {/* white logo background is removed via multiply blend over the cream page */}
+              <img
+                src="/logo.png"
+                alt="Vance Archives"
+                className="h-9 w-auto object-contain mix-blend-multiply transition-transform duration-300 group-hover:scale-[1.04]"
+              />
+            </Link>
+            <nav className="flex items-center gap-8">
+              <Link
+                href="/"
+                className="text-[0.7rem] tracking-[0.28em] uppercase text-muted transition-colors hover:text-accent"
+              >
+                Archive
+              </Link>
+            </nav>
+          </div>
+        </header>
+
+        <div className="flex-1">{children}</div>
+
+        <footer className="mt-auto border-t border-line/70 px-6 py-12 sm:px-12 lg:px-20">
+          <div className="mx-auto flex max-w-[1400px] flex-col items-center gap-4 sm:flex-row sm:justify-between">
+            <span className="font-serif text-xl tracking-wide text-foreground/80">
+              Vance Archives
+            </span>
+            <div className="flex items-center gap-8">
+              <Link
+                href="/terms"
+                className="text-[0.7rem] tracking-[0.28em] uppercase text-muted transition-colors hover:text-accent"
+              >
+                Terms
+              </Link>
+              <Link
+                href="/privacy"
+                className="text-[0.7rem] tracking-[0.28em] uppercase text-muted transition-colors hover:text-accent"
+              >
+                Privacy
+              </Link>
+              <span className="text-[0.7rem] tracking-[0.28em] uppercase text-muted/60">
+                © {new Date().getFullYear()}
+              </span>
+            </div>
+          </div>
         </footer>
       </body>
     </html>

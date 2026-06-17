@@ -186,6 +186,8 @@ class StorageTests(unittest.TestCase):
 
     def test_storage_service_commits_context(self) -> None:
         service = StorageService()
+        # Force the local sqlite path so the test stays hermetic (no live Supabase).
+        service._supabase_db_url = None
         service.database_path = self.database_path
 
         with service.connection() as conn:

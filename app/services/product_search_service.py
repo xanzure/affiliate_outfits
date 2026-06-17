@@ -20,6 +20,17 @@ BLOCKED_RETAILER_TERMS = {
     "temu",
     "wish",
     "zaful",
+    # Resale / secondhand marketplaces — no affiliate links, unpredictable stock
+    "poshmark",
+    "thredup",
+    "depop",
+    "mercari",
+    "ebay",
+    "etsy",
+    "vinted",
+    "vestiaire",
+    "tradesy",
+    "therealreal",
 }
 CONDITIONAL_RETAILER_TERMS: set[str] = set()  # shein and amazon now allowed
 LOW_STAKES_CATEGORY_TERMS = {
@@ -213,16 +224,27 @@ class TavilyProductSearchProvider:
         with urlopen(request, timeout=self.timeout_seconds) as response:
             data = json.loads(response.read().decode("utf-8"))
 
+        # Top-level images are the cleanest — Tavily curates these per query
+        top_images: list[str] = [
+            u for u in data.get("images", [])
+            if _looks_like_product_image(u)
+        ]
+
         results = []
-        for item in data.get("results", []):
-            result = self._item_to_result(item, category=category)
+        for i, item in enumerate(data.get("results", [])):
+            result = self._item_to_result(item, category=category, top_images=top_images, rank=i)
             if result:
                 results.append(result)
 
         return rank_product_results(results, category=category)[:limit]
 
     def _item_to_result(
-        self, item: dict[str, Any], *, category: str | None
+        self,
+        item: dict[str, Any],
+        *,
+        category: str | None,
+        top_images: list[str] | None = None,
+        rank: int = 0,
     ) -> ProductSearchResult | None:
         url = item.get("url", "")
         title = _clean_text(item.get("title")) or ""
@@ -231,7 +253,6 @@ class TavilyProductSearchProvider:
         if not url or not title:
             return None
 
-        # Hard skip: non-product pages
         skip_domains = {
             "pinterest", "reddit", "youtube", "instagram", "tiktok", "wikipedia",
             "businessinsider", "buzzfeed", "refinery29", "whowhatwear", "byrdie",
@@ -241,7 +262,6 @@ class TavilyProductSearchProvider:
         if any(d in netloc for d in skip_domains):
             return None
 
-        # Skip category/search/list pages — we want single product pages
         path = urlparse(url).path.lower()
         skip_path_patterns = ["/cat", "/category", "/shop", "/market", "/search", "/guides/", "/c/"]
         query_string = urlparse(url).query.lower()
@@ -253,8 +273,14 @@ class TavilyProductSearchProvider:
         retailer = _retailer_from_url(url)
         price_cents = _extract_price_from_text(content) or _extract_price_from_text(title)
 
-        # Use Tavily's returned image if available, otherwise scrape
-        image_url = item.get("image") or _scrape_image_url(url)
+        # Prefer top-level images (Tavily-curated, cleanest) indexed by result rank,
+        # then fall back to per-result images list
+        image_url: str | None = None
+        if top_images and rank < len(top_images):
+            image_url = top_images[rank]
+        if not image_url:
+            per_result = [u for u in (item.get("images") or []) if _looks_like_product_image(u)]
+            image_url = per_result[0] if per_result else None
 
         return ProductSearchResult(
             retailer=retailer,
@@ -267,6 +293,16 @@ class TavilyProductSearchProvider:
             source="tavily",
             metadata={"snippet": content[:200]},
         )
+
+
+def _looks_like_product_image(url: str) -> bool:
+    """Filter out logos, icons, and banners — keep CDN product images."""
+    skip = {"logo", "icon", "banner", "cookie", "avatar", "sprite", "placeholder", "pixel", "tracking"}
+    lower = url.lower()
+    if any(s in lower for s in skip):
+        return False
+    # Must look like an image file or CDN path
+    return any(ext in lower for ext in (".jpg", ".jpeg", ".png", ".webp", "/images/", "/media/", "/cdn/", "asos-media", "media.mango", "nordstrom", "revolve"))
 
 
 def _looks_like_product_url(url: str) -> bool:
@@ -357,8 +393,49 @@ def _extract_price_from_text(text: str) -> int | None:
     return None
 
 
+class AWINProductSearchProvider:
+    """Queries the local AWIN product catalog (populated by sync_awin_feeds.py)."""
+
+    def __init__(self, catalog_path: Path) -> None:
+        from app.db.awin_catalog import connect_catalog
+        self._conn = connect_catalog(catalog_path)
+
+    def search(
+        self,
+        query: str,
+        *,
+        category: str | None = None,
+        limit: int = 5,
+    ) -> list[ProductSearchResult]:
+        from app.db.awin_catalog import search_catalog
+        hits = search_catalog(self._conn, query, category=category, limit=limit * 2)
+        results = [
+            ProductSearchResult(
+                retailer=h.merchant_name,
+                name=h.product_name,
+                url=h.product_url or h.affiliate_url,
+                category=h.category or category,
+                image_url=h.image_url,
+                price_cents=h.price_cents,
+                currency=h.currency,
+                source="awin_catalog",
+                metadata={
+                    "affiliate_url": h.affiliate_url,
+                    "awin_product_id": h.aw_product_id,
+                    "colour": h.colour,
+                    "brand": h.brand_name,
+                },
+            )
+            for h in hits
+        ]
+        return rank_product_results(results, category=category)[:limit]
+
+
 def product_search_provider_from_settings(settings: Settings | None = None) -> ProductSearchProvider:
     settings = settings or load_settings()
+    if settings.product_search_provider == "awin":
+        catalog_path = settings.data_dir / "awin_catalog.sqlite3"
+        return AWINProductSearchProvider(catalog_path)
     if settings.product_search_provider in {"google_shopping", "serpapi"}:
         return SerpApiGoogleShoppingProvider(
             api_key=settings.serpapi_api_key or "",

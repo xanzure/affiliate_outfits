@@ -16,7 +16,7 @@ from app.services.llm_service import ClaudeJSONService, LLMPrompt
 
 log = logging.getLogger(__name__)
 
-_OPUS_MODEL = "claude-opus-4-8"
+_OPUS_MODEL = "claude-sonnet-4-6"
 
 _STORE_KNOWLEDGE = (
     Path(__file__).parent / "store_knowledge.md"
@@ -48,11 +48,15 @@ that name actual retailers and specific product silhouettes.
 ## Previously Generated Outfits (do not repeat)
 {history}
 
+## Cached Product Inventory (already sourced, images ready — prefer these when they fit)
+{cached_inventory}
+
 Generate {outfit_count} distinct, opinionated outfit{plural}. Each must:
 - Tell a coherent visual story — not just random pieces thrown together
 - Be COMPLETE: minimum top + bottom + shoe (or dress + shoe). Accessories encouraged.
 - Reference specific retailers and product names in search queries, not generic terms
 - Differ meaningfully from each other in silhouette, color story, or mood
+- Prefer cached inventory items when they genuinely fit — note them with use_cached_url field
 
 Return JSON:
 {{
@@ -68,6 +72,7 @@ Return JSON:
           "color": "specific color (e.g. ecru, burnt sienna, slate — never 'neutral' or 'casual')",
           "material": "specific material (e.g. linen, washed denim, suede, ribbed knit)",
           "search_query": "targeted search query naming retailer + product + color + material. Example: 'COS wide-leg linen trousers ecru'",
+          "use_cached_url": "URL from cached inventory if reusing an existing item, otherwise null",
           "price_range": "budget | mid | elevated | luxury"
         }}
       ]
@@ -136,10 +141,23 @@ def generate_outfit_specs(
     history: list[dict[str, Any]],
     *,
     service: ClaudeJSONService | None = None,
+    cached_products: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Generate outfit specs with the Opus curator."""
+    """Generate outfit specs with the curator."""
     service = service or make_curator_service()
     plural = "s" if outfit_count != 1 else ""
+
+    if cached_products:
+        inventory_lines = []
+        for p in cached_products:
+            price = f"${p['price_cents']/100:.0f}" if p.get("price_cents") else "?"
+            inventory_lines.append(
+                f"- [{p.get('category','?')}] {p.get('name','')} | {p.get('retailer','')} | {price} | {p.get('url','')}"
+            )
+        cached_inventory = "\n".join(inventory_lines)
+    else:
+        cached_inventory = "None yet."
+
     prompt = LLMPrompt(
         title=f"Outfit Curator: Generate {outfit_count} Outfit{plural}",
         body=_GENERATION_PROMPT.format(
@@ -148,6 +166,7 @@ def generate_outfit_specs(
             store_knowledge=_STORE_KNOWLEDGE,
             brief=json.dumps(brief, indent=2),
             history=json.dumps(history, indent=2) if history else "[]",
+            cached_inventory=cached_inventory,
         ),
         system=_CURATOR_SYSTEM,
     )
@@ -222,15 +241,23 @@ def review_found_products(
 
 def outfit_spec_to_search_queries(outfit_spec: dict[str, Any]) -> list[dict[str, Any]]:
     """Convert a curator or normalized pipeline spec to search_queries list."""
-    # Curator format has "items" with search_query per item
     if outfit_spec.get("items"):
         return [
-            {"query": item.get("search_query", ""), "category": item.get("category"), "limit": 5}
+            {
+                "query": item.get("search_query", ""),
+                "category": item.get("category"),
+                "limit": 5,
+                "use_cached_url": item.get("use_cached_url") or None,
+            }
             for item in outfit_spec["items"]
         ]
-    # Normalized pipeline format already has "search_queries"
     return [
-        {"query": q.get("query", ""), "category": q.get("category"), "limit": q.get("limit", 5)}
+        {
+            "query": q.get("query", ""),
+            "category": q.get("category"),
+            "limit": q.get("limit", 5),
+            "use_cached_url": q.get("use_cached_url") or None,
+        }
         for q in outfit_spec.get("search_queries", [])
         if isinstance(q, dict)
     ]

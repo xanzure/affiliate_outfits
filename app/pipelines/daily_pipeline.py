@@ -1,9 +1,15 @@
 from __future__ import annotations
 
 import sqlite3
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+
+
+def _step(msg: str, index: int | None = None, total: int | None = None) -> None:
+    prefix = f"[{index}/{total}] " if index is not None else "── "
+    print(f"\n{prefix}{msg}", flush=True)
 
 from app.agents.collage.style_agent import BatchVisualStyle, generate_batch_visual_style
 from app.agents.outfit.parser import normalize_outfit_agent_output, normalize_outfit_agent_outputs
@@ -23,7 +29,7 @@ from app.pipelines.publish_pipeline import (
     create_local_publish_records,
     create_local_publish_records_for_outfit_set,
 )
-from app.pipelines.product_pipeline import resolve_products_from_searches
+from app.pipelines.product_pipeline import load_cached_products_for_curator, resolve_products_from_searches
 from app.scheduler import ScheduledConcept, mark_scheduled_concept_posted
 from app.services.image_service import ImageService, PreparedImage
 
@@ -65,18 +71,31 @@ def run_daily_for_brief(
     settings: Settings | None = None,
 ) -> DailyPipelineResult:
     settings = settings or load_settings()
+    t0 = time.time()
+
+    _step("Loading cached product inventory...", 1, 5)
+    cached_products = load_cached_products_for_curator(conn)
+    print(f"   {len(cached_products)} cached product(s) available", flush=True)
+
+    _step("Generating outfit spec (curator)...", 2, 5)
     outfit_output = outfit_output or generate_outfit_with_llm(
         scheduled_brief.brief,
         history=[],
+        cached_products=cached_products,
     )
     outfit_output = normalize_outfit_agent_output(outfit_output)
+    title = outfit_output.get("outfit", {}).get("title", "untitled")
+    print(f"   Outfit: {title}", flush=True)
 
+    _step("Searching & curating products...", 3, 5)
     products = curate_outfit_products_with_feedback(
         conn,
         outfit_output,
         tracking_id=f"concept-{scheduled_brief.concept_id}",
         settings=settings,
     )
+    print(f"   {len(products)} product(s) sourced", flush=True)
+
     outfit = create_outfit(
         conn,
         concept_id=scheduled_brief.concept_id,
@@ -88,11 +107,15 @@ def run_daily_for_brief(
             "source": "daily_pipeline",
         },
     )
+
+    _step("Processing images (Runflow)...", 4, 5)
     prepared_images = prepare_product_images(
         conn,
         products,
         image_service=ImageService(settings),
     )
+
+    _step("Rendering collage...", 5, 5)
     batch_style = generate_batch_visual_style(scheduled_brief.seed)
     categories = [p.category for p in products]
     collage_export = render_collage_manifest_for_images(
@@ -143,6 +166,9 @@ def run_daily_for_brief(
         )
         autopublish_posts(conn, publish_result.posts, settings=settings)
         scheduled_brief = mark_scheduled_concept_posted(conn, scheduled_brief)
+
+    elapsed = time.time() - t0
+    print(f"\n✓ Done in {elapsed:.0f}s — collage: {collage_export.image_path.name}", flush=True)
 
     return DailyPipelineResult(
         scheduled_concept=scheduled_brief,
