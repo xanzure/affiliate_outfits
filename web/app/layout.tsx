@@ -36,20 +36,19 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} ${cormorant.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <header className="sticky top-0 z-40 border-b border-line/70 bg-background/75 backdrop-blur-md">
-          <div className="mx-auto flex max-w-[1400px] items-center justify-between px-6 py-3.5 sm:px-12 lg:px-20">
+        <header className="sticky top-0 z-40 border-b border-line/70 bg-background/80 backdrop-blur-md">
+          <div className="mx-auto flex max-w-[1400px] items-center justify-between px-5 py-3 sm:px-12 sm:py-4 lg:px-20">
             <Link href="/" className="group flex items-center">
-              {/* white logo background is removed via multiply blend over the cream page */}
               <img
-                src="/logo.png"
+                src="/logo_cropped.png"
                 alt="Vance Archives"
-                className="h-9 w-auto object-contain mix-blend-multiply transition-transform duration-300 group-hover:scale-[1.04]"
+                className="h-9 w-auto object-contain transition-transform duration-300 group-hover:scale-[1.04] sm:h-11"
               />
             </Link>
             <nav className="flex items-center gap-8">
               <Link
                 href="/"
-                className="text-[0.7rem] tracking-[0.28em] uppercase text-muted transition-colors hover:text-accent"
+                className="text-[0.65rem] tracking-[0.28em] uppercase text-muted transition-colors hover:text-accent sm:text-[0.7rem]"
               >
                 Archive
               </Link>

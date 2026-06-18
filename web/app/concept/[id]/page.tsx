@@ -23,8 +23,8 @@ export default async function ConceptPage({ params }: Props) {
 
   return (
     <main className="paper-vignette">
-      <div className="mx-auto max-w-[1400px] px-6 pt-12 pb-28 sm:px-12 lg:px-20">
-        <nav className="mb-12">
+      <div className="mx-auto max-w-[1400px] px-5 pt-8 pb-20 sm:px-12 sm:pt-12 sm:pb-28 lg:px-20">
+        <nav className="mb-10 sm:mb-12">
           <Link
             href="/"
             className="group inline-flex items-center gap-2 text-[0.7rem] tracking-[0.28em] uppercase text-muted transition-colors hover:text-accent"
@@ -34,11 +34,11 @@ export default async function ConceptPage({ params }: Props) {
           </Link>
         </nav>
 
-        <header className="mb-16 animate-fade-up border-b border-line/70 pb-12">
-          <p className="mb-4 text-[0.7rem] tracking-[0.38em] uppercase text-accent">
+        <header className="mb-12 animate-fade-up border-b border-line/70 pb-10 sm:mb-16 sm:pb-12">
+          <p className="mb-4 text-[0.65rem] tracking-[0.35em] uppercase text-accent sm:text-[0.7rem]">
             Concept
           </p>
-          <h1 className="font-serif text-5xl leading-[0.95] tracking-tight text-foreground sm:text-6xl">
+          <h1 className="font-serif text-[2.5rem] leading-[0.95] tracking-tight text-foreground sm:text-6xl">
             {label}
           </h1>
           {displayName && (
@@ -55,7 +55,7 @@ export default async function ConceptPage({ params }: Props) {
             No outfits yet
           </p>
         ) : (
-          <div className="grid grid-cols-1 gap-x-10 gap-y-16 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-x-8 gap-y-12 sm:grid-cols-2 sm:gap-y-16 lg:grid-cols-3">
             {outfits.map((outfit, i) => (
               <OutfitCanvas key={outfit.id} outfit={outfit} index={i} />
             ))}

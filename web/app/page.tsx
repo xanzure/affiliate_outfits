@@ -12,29 +12,29 @@ export default async function HomePage() {
 
   return (
     <main className="paper-vignette">
-      <section className="mx-auto max-w-[1400px] px-6 pt-20 pb-14 sm:px-12 lg:px-20">
+      <section className="mx-auto max-w-[1400px] px-5 pt-12 pb-12 sm:px-12 sm:pt-20 sm:pb-14 lg:px-20">
         <div className="max-w-3xl animate-fade-up">
-          <p className="mb-5 text-[0.7rem] tracking-[0.38em] uppercase text-accent">
+          <p className="mb-4 text-[0.65rem] tracking-[0.35em] uppercase text-accent sm:mb-5 sm:text-[0.7rem]">
             The Archive
           </p>
-          <h1 className="font-serif text-5xl leading-[0.95] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
+          <h1 className="font-serif text-[2.75rem] leading-[0.95] tracking-tight text-foreground sm:text-6xl lg:text-7xl">
             Outfits, curated by
             <br />
             <span className="italic text-accent">obsession.</span>
           </h1>
-          <p className="mt-6 max-w-xl text-sm leading-relaxed text-muted">
+          <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted sm:mt-6">
             A living archive of styled looks — built around artists, eras, and the
             aesthetics worth dressing for. Every piece shoppable.
           </p>
-          <div className="mt-8 flex items-center gap-3 text-[0.7rem] tracking-[0.28em] uppercase text-muted/70">
+          <div className="mt-7 flex items-center gap-3 text-[0.65rem] tracking-[0.28em] uppercase text-muted/70 sm:mt-8 sm:text-[0.7rem]">
             <span className="h-px w-10 bg-line" />
             {concepts.length} active concepts
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-[1400px] px-6 pb-28 sm:px-12 lg:px-20">
-        <div className="grid grid-cols-2 gap-x-5 gap-y-12 sm:grid-cols-3 lg:grid-cols-4">
+      <section className="mx-auto max-w-[1400px] px-5 pb-20 sm:px-12 sm:pb-28 lg:px-20">
+        <div className="grid grid-cols-2 gap-x-4 gap-y-10 sm:grid-cols-3 sm:gap-x-5 sm:gap-y-12 lg:grid-cols-4">
           {concepts.map((concept, i) => (
             <ConceptCard
               key={concept.id}
