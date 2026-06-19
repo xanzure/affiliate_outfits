@@ -137,6 +137,7 @@ def run_daily_for_brief(
         conn,
         outfit_id=outfit.id,
         image_path=str(collage_export.image_path),
+        collage_url=_upload_collage(outfit.id, collage_export.image_path),
         layout=_collage_manifest_with_products(collage_export.manifest, products),
         metadata={
             "renderer": "scattered",
@@ -317,6 +318,7 @@ def _materialize_outfit_output(
         conn,
         outfit_id=outfit.id,
         image_path=str(collage_export.image_path),
+        collage_url=_upload_collage(outfit.id, collage_export.image_path),
         layout=_collage_manifest_with_products(collage_export.manifest, products),
         metadata={
             "renderer": "scattered",
@@ -336,6 +338,23 @@ def _materialize_outfit_output(
         collage_path=collage_export.image_path,
         collage_id=collage.id,
     )
+
+
+def _upload_collage(outfit_id: str, image_path: Path) -> str | None:
+    """Upload a rendered collage to Supabase storage; return its public URL.
+
+    Best-effort: returns None if storage isn't configured or the upload fails,
+    so collage hosting never breaks the pipeline.
+    """
+    from app.services.asset_storage import asset_storage_from_env
+
+    try:
+        storage = asset_storage_from_env()
+        if storage is None:
+            return None
+        return storage.upload_collage(outfit_id, image_path)
+    except Exception:  # noqa: BLE001
+        return None
 
 
 def _collage_manifest_with_products(manifest: dict[str, Any], products: list[Product]) -> dict[str, Any]:

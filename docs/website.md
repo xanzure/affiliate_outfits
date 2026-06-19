@@ -8,9 +8,19 @@ The site is read-only. It does not write to the database, trigger pipeline runs,
 
 ## Brand Direction
 
-Quiet, editorial, restrained. Inspired by the brand feel of Acne Studios — understated confidence, generous whitespace, nothing decorative. The content is product flat-lays rather than model photography, so the design must carry the editorial weight through typography, spacing, and layout rather than imagery.
+Editorial and restrained, with warmth. The content is product flat-lays rather
+than model photography, so the design carries weight through typography, spacing,
+and layout. The `VA` "Vance Archives" logo (`web/public/logo_cropped.png`, a
+tight transparent crop) anchors a sticky header.
 
-Color palette: warm off-white backgrounds, near-black text, no accent colors. Let the products speak.
+- **Background**: warm paper off-white (`--background: #f3efe9`).
+- **Text**: near-black ink (`--foreground: #211c1a`).
+- **Accent**: a single warm bronze (`--accent: #9a6f4a`) used sparingly for
+  hovers, active states, and the italic display flourish.
+- **Type**: Cormorant Garamond serif for display headings (matching the logo),
+  Geist sans for body, Geist Mono for labels/numbers.
+
+Design tokens live in `web/app/globals.css` as CSS variables exposed to Tailwind.
 
 ---
 
@@ -38,7 +48,8 @@ Each outfit is shown as a numbered card (`#001`, `#002`, etc.) containing an int
 
 Products are rendered as individual images positioned on a canvas using absolute coordinates. Each product image is independently hoverable and clickable.
 
-- **Hover**: subtle glow effect on the product image
+- **Hover**: the product lifts and scales with a dark elevation shadow plus a warm
+  bronze halo, so it reads clearly against the light canvas
 - **Click**: opens a product panel showing name, retailer, price, and a link to the product page
 
 Product layout (position, size, rotation) is stored per product in the outfit record. The backend also stores the rendered collage and its pixel manifest in the `collages` table for audit/history, but the frontend consumes `outfit.spec.layout` directly without inferring or auto-arranging.
@@ -119,25 +130,23 @@ interface Outfit {
 
 ## Backend Integration
 
-The frontend is currently built on local mock data. All mock data is typed to match the backend models exactly so that swapping in a real data source requires only replacing the data layer, not the UI.
+The frontend reads directly from Supabase. All data access lives in
+`web/lib/data.ts` (using the client in `web/lib/supabase.ts`), so it is the only
+file that changes if the data source ever moves. Types in `web/lib/types.ts`
+mirror the backend `models.py` shapes.
 
-### Current State (Mock)
+Data access functions:
 
-- Concepts and outfits are defined in static TypeScript data files
-- Product records are inlined into outfit mock data
-- No API calls are made
+| Page | Function (`web/lib/data.ts`) | Notes |
+|------|------------------------------|-------|
+| Concepts index | `getConcepts`, `getOutfitCountsByConcept` | Active concepts that have at least one outfit, ranked |
+| Concept detail | `getConcept`, `getOutfitsForConcept` | Concept plus its outfits with products + layout |
 
-### Future State (API)
+The Python pipeline writes concepts, outfits, products, and `outfit.spec.layout`
+to the same Supabase Postgres instance. The site is read-only.
 
-The planned integration points are:
-
-| Page | Endpoint | Notes |
-|------|----------|-------|
-| Concepts index | `GET /concepts` | Returns active concepts only |
-| Concept detail | `GET /concepts/:id` | Returns concept + outfit list |
-| Outfit products | `GET /outfits/:id/products` | Returns products with layout from spec |
-
-These endpoints do not exist yet. When they are added to the backend, the frontend data layer (`src/lib/data.ts` or equivalent) should be the only file that changes.
+The static fixtures in `web/lib/mock/` are legacy scaffolding and are no longer
+imported.
 
 ### Product Links
 
@@ -151,14 +160,19 @@ The backend stores full rendered-collage records in the `collages` table. `colla
 
 ### Image Hosting
 
-The website serves collage images as static assets from `web/public/images/collages/`. The pipeline saves the final rendered collage to that directory and records the public URL in `collages.collage_url` (e.g. `/images/collages/{outfit_id}.jpg`).
+Individual product images are the **isolated transparent cutouts** produced by the
+image service. The pipeline uploads each cutout to Supabase storage (the
+`product-images` bucket) and points `product.image_url` at that public URL, so the
+flat-lay positions real cutouts — not raw retailer CDN photos.
 
-This `collage_url` is the single source of truth for the public-facing image. It is used for:
+Rendered collages are saved to disk (`data/images/collages/{outfit_id}.png`) and
+recorded in the `collages` table for audit/history. When a collage is generated,
+the pipeline can set `concept.metadata.cover_image_url` so the concept card shows a
+real cover.
 
-- TikTok and Pinterest autoposting — the publisher reads `collage.collage_url` to get the public URL required by platform APIs
-- Concept cover images — when a collage is generated, the pipeline sets `concept.metadata.cover_image_url` to `collage.collage_url` so the concept card on the homepage shows a real image automatically
-
-`Post.image_path` remains the local disk path used internally by the publisher. Individual product images are served directly from retailer CDNs via `product.image_url` and do not need to be hosted by the website.
+`Post.image_path` remains the local disk path used internally by the publisher.
+TikTok/Pinterest autoposting requires publicly reachable image URLs (see
+[autoposting.md](autoposting.md)).
 
 ---
 

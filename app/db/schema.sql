@@ -76,6 +76,11 @@ CREATE TABLE IF NOT EXISTS posts (
     caption TEXT,
     platform_post_id TEXT,
     published_at TEXT,
+    scheduled_for TEXT,
+    queue_order TEXT,
+    is_manual_schedule INTEGER NOT NULL DEFAULT 0,
+    approved INTEGER NOT NULL DEFAULT 1,
+    link_check TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     metadata_json TEXT NOT NULL DEFAULT '{}',
@@ -89,6 +94,30 @@ CREATE INDEX IF NOT EXISTS idx_posts_platform ON posts(platform);
 CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status);
 CREATE INDEX IF NOT EXISTS idx_posts_concept_id ON posts(concept_id);
 CREATE INDEX IF NOT EXISTS idx_posts_outfit_id ON posts(outfit_id);
+CREATE INDEX IF NOT EXISTS idx_posts_scheduled_for ON posts(scheduled_for);
+CREATE INDEX IF NOT EXISTS idx_posts_queue_order ON posts(queue_order);
+
+CREATE TABLE IF NOT EXISTS jobs (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    payload_json TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL DEFAULT 'queued',
+    result_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status);
+
+CREATE TABLE IF NOT EXISTS admin_actions (
+    id TEXT PRIMARY KEY,
+    action TEXT NOT NULL,
+    target_id TEXT,
+    detail_json TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_actions_created_at ON admin_actions(created_at);
 
 CREATE TABLE IF NOT EXISTS metrics (
     id TEXT PRIMARY KEY,

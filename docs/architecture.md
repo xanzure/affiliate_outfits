@@ -69,7 +69,7 @@ Output:
 - downloaded images
 - metadata
 
-The initial product source is Google Shopping through an API provider. The project must not scrape product pages or search results. Provider-specific result fields are normalized before storage so the system can later switch to affiliate catalog providers such as ShopMy, Skimlinks, or other networks without changing outfit generation, collage rendering, or the website.
+The initial product source is Google Shopping through an API provider. The project must not scrape product pages or search results. Provider-specific result fields are normalized before storage so the system can switch between sources — Google Shopping, the AWIN affiliate catalog (`PRODUCT_SEARCH_PROVIDER=awin`), or future networks — without changing outfit generation, collage rendering, or the website. See [product_sourcing.md](product_sourcing.md).
 
 Product records store `url` and `affiliate_url` separately. `url` is the standard product page used by the website today. `affiliate_url` remains null until a configured affiliate resolver can produce a tracked link.
 

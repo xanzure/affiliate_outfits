@@ -41,12 +41,12 @@ _FONTS: dict[str, dict[str, str]] = {
 
 # Relative vertical weight of each zone within its column
 _TIER_WEIGHT: dict[str, float] = {
-    "outerwear": 3.0,
+    "outerwear": 3.5,
     "dress":     3.0,
-    "top":       2.0,
-    "bottom":    2.0,
+    "top":       2.5,
+    "bottom":    2.5,
     "bag":       1.7,
-    "shoe":      1.5,
+    "shoe":      0.8,
     "accessory": 1.0,
 }
 
@@ -290,17 +290,17 @@ def _compute_layout(
     usable_h = usable_y1 - usable_y0
 
     zones = [_resolve_zone(c) for c in categories]
-    shoes = [i for i in range(n) if zones[i] == "shoe"]
-    apparel = [i for i in range(n) if zones[i] in _APPAREL_ZONES]
+    shoes      = [i for i in range(n) if zones[i] == "shoe"]
+    outerwear  = [i for i in range(n) if zones[i] == "outerwear"]
+    apparel    = [i for i in range(n) if zones[i] in _APPAREL_ZONES and zones[i] != "outerwear"]
     accessories = [i for i in range(n) if zones[i] in _EXTRA_ZONES and zones[i] != "shoe"]
 
     placements: list[tuple[int, int, int, int, float] | None] = [None] * n
 
-    # Central spine: apparel head-to-toe, then shoes in line beneath them
+    # Central spine: core garments (top/bottom/dress) then shoes beneath
     spine_items = (
         sorted(apparel, key=lambda i: (_APPAREL_ORDER.get(zones[i], 9), i)) + shoes
     )
-    # If there's nothing for the spine, let accessories occupy the centre instead
     if not spine_items and accessories:
         spine_items, accessories = accessories, []
 
@@ -312,28 +312,38 @@ def _compute_layout(
     ):
         placements[i] = p
 
-    # Accessories: split across left and right flanks, slightly tilted
-    if accessories:
-        spine_left = spine_cx - spine_w // 2
-        spine_right = spine_cx + spine_w // 2
-        left_cx = (usable_x0 + spine_left - _FLANK_GAP) // 2
-        right_cx = (spine_right + _FLANK_GAP + usable_x1) // 2
-        left_w = max(150, spine_left - _FLANK_GAP - usable_x0)
-        right_w = max(150, usable_x1 - spine_right - _FLANK_GAP)
+    # Compute flank geometry (needed for both accessories and outerwear)
+    spine_left  = spine_cx - spine_w // 2
+    spine_right = spine_cx + spine_w // 2
+    left_cx  = (usable_x0 + spine_left  - _FLANK_GAP) // 2
+    right_cx = (spine_right + _FLANK_GAP + usable_x1) // 2
+    left_w   = max(150, spine_left  - _FLANK_GAP - usable_x0)
+    right_w  = max(150, usable_x1 - spine_right  - _FLANK_GAP)
 
-        acc_sorted = sorted(accessories, key=lambda i: (_EXTRA_ORDER.get(zones[i], 9), i))
-        right_items = acc_sorted[0::2]   # alternate: 1st, 3rd … on the right
-        left_items = acc_sorted[1::2]    #            2nd, 4th … on the left
+    # Accessories: alternate right / left
+    acc_sorted  = sorted(accessories, key=lambda i: (_EXTRA_ORDER.get(zones[i], 9), i))
+    right_acc   = acc_sorted[0::2]
+    left_acc    = acc_sorted[1::2]
 
-        for items, fw, fcx in (
-            (right_items, right_w, right_cx),
-            (left_items, left_w, left_cx),
+    for items, fw, fcx in ((right_acc, right_w, right_cx), (left_acc, left_w, left_cx)):
+        for i, p in _place_flank(
+            items, flank_w=fw, flank_cx=fcx, y0=usable_y0,
+            usable_h=usable_h, zones=zones, rng=rng,
         ):
-            for i, p in _place_flank(
-                items, flank_w=fw, flank_cx=fcx, y0=usable_y0,
-                usable_h=usable_h, zones=zones, rng=rng,
-            ):
-                placements[i] = p
+            placements[i] = p
+
+    # Outerwear: goes on whichever flank has fewer accessories (editorial side column)
+    if outerwear:
+        if len(left_acc) <= len(right_acc):
+            ow_cx, ow_w = left_cx, left_w
+        else:
+            ow_cx, ow_w = right_cx, right_w
+        for i, p in _stack_column(
+            outerwear, col_w=ow_w, col_cx=ow_cx, y0=usable_y0,
+            avail_h=usable_h, zones=zones, rng=rng, max_rot=_APPAREL_ROT,
+            order_map=_APPAREL_ORDER,
+        ):
+            placements[i] = p
 
     # Safety: any item that somehow wasn't placed gets a centered fallback box
     for i in range(n):

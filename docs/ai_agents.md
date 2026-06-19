@@ -11,7 +11,7 @@ Add these values to `.env`:
 ```env
 AI_PROVIDER=anthropic
 AI_MODE=claude
-ANTHROPIC_MODEL=claude-haiku-4-5
+ANTHROPIC_MODEL=claude-sonnet-4-6
 ANTHROPIC_API_KEY=your_api_key_here
 ```
 

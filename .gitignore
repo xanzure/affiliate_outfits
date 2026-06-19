@@ -48,3 +48,5 @@ app/assets/fonts/*
 !app/assets/fonts/.gitkeep
 app/assets/templates/*
 !app/assets/templates/.gitkeep
+
+notes.txt

@@ -1,8 +1,30 @@
 # Product Sourcing
 
-The first product source is Google Shopping through an API provider. The current adapter is SerpApi's Google Shopping engine.
+Set the active source with `PRODUCT_SEARCH_PROVIDER`. Supported providers:
 
-No product search or product detail scraping should be used. If a provider does not expose an API, it should not be part of the automated sourcing layer.
+- `google_shopping` — SerpApi's Google Shopping engine (current default). Returns
+  merchant product photos and links across retailers.
+- `awin` — the local AWIN affiliate catalog (see below). Queries a downloaded
+  product feed, so results carry pre-built affiliate URLs and zero per-search cost.
+- `fixtures` — local fixtures for tests/offline development.
+
+No product search or product detail scraping should be used. If a provider does
+not expose an API or feed, it should not be part of the automated sourcing layer.
+
+## AWIN Affiliate Catalog
+
+`AWINProductSearchProvider` queries a local SQLite catalog
+(`data/awin_catalog.sqlite3`) built from approved AWIN merchant product feeds.
+Each feed is a bulk CSV/XML of products with names, images, prices, and
+pre-built affiliate URLs — no per-search API cost.
+
+- `scripts/sync_awin_feeds.py` downloads every approved feed into the catalog
+  (`--stats` prints counts). It needs `AWIN_PUBLISHER_ID` and `AWIN_OAUTH2_TOKEN`
+  in `.env`.
+- Implemented in `app/services/awin_feed_service.py` (download/parse/upsert) and
+  `app/db/awin_catalog.py` (catalog + full-text search).
+- Switch the pipeline over with `PRODUCT_SEARCH_PROVIDER=awin` once merchants are
+  approved and the catalog is populated.
 
 ## Provider Boundary
 
@@ -28,13 +50,24 @@ Product records store two link fields:
 
 The website uses one shopping link per product: `affiliate_url` when present, otherwise `url`.
 
-The initial `AFFILIATE_PROVIDER=none` resolver intentionally leaves `affiliate_url` null. Future resolvers can populate it for ShopMy, Skimlinks, or other networks.
+The initial `AFFILIATE_PROVIDER=none` resolver intentionally leaves `affiliate_url`
+null when using `google_shopping`. The `awin` provider supplies affiliate URLs
+directly from the feed. Future resolvers can populate `affiliate_url` for other
+networks (CJ, Impact, etc.).
 
 ## Retailer Policy
 
-The product pipeline filters suspicious or scam-prone retailers before selection.
+The product pipeline filters suspicious or scam-prone retailers before selection
+(`is_allowed_retailer` / `BLOCKED_RETAILER_TERMS` in `product_search_service.py`).
 
-Cheap retailers are not automatically blocked if the item is low-stakes and gimmicky, such as a hat, sunglasses, jewelry, or small accessory. For reusable wardrobe pieces like shoes, outerwear, denim, or dresses, suspicious and ultra-disposable sources should be avoided.
+Hard-blocked: ultra-disposable dropship sources (AliExpress, Temu, Wish, etc.) and
+resale/secondhand marketplaces (Poshmark, eBay, Depop, ThredUp, Vinted, etc.) —
+the latter have no affiliate links and unpredictable stock.
+
+Cheap retailers are not automatically blocked if the item is low-stakes and
+gimmicky, such as a hat, sunglasses, jewelry, or small accessory. For reusable
+wardrobe pieces like shoes, outerwear, denim, or dresses, suspicious and
+ultra-disposable sources should be avoided.
 
 After filtering, the deterministic ranking prefers cheaper safe items first, with missing prices ranked last.
 

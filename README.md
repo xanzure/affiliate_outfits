@@ -142,7 +142,7 @@ Configure AI agents in `.env`:
 ```env
 AI_PROVIDER=anthropic
 AI_MODE=claude
-ANTHROPIC_MODEL=claude-haiku-4-5
+ANTHROPIC_MODEL=claude-sonnet-4-6
 ANTHROPIC_API_KEY=your_api_key_here
 ```
 
@@ -157,7 +157,15 @@ GOOGLE_SHOPPING_HL=en
 AFFILIATE_PROVIDER=none
 ```
 
-The first product source is Google Shopping through an API provider, not scraping. Product records store the normal product page URL and a separate nullable `affiliate_url`. The website should use `affiliate_url` when it exists and fall back to the normal `url` until affiliate networks are added.
+The first product source is Google Shopping through an API provider, not scraping. Product records store the normal product page URL and a separate nullable `affiliate_url`. The website uses `affiliate_url` when it exists and falls back to the normal `url`.
+
+An AWIN affiliate catalog is also supported (`PRODUCT_SEARCH_PROVIDER=awin`): approved merchant feeds are synced into a local catalog that already carries affiliate URLs. See [docs/product_sourcing.md](docs/product_sourcing.md).
+
+```env
+# Optional: AWIN affiliate catalog
+AWIN_PUBLISHER_ID=your_publisher_id
+AWIN_OAUTH2_TOKEN=your_oauth2_token
+```
 
 Configure autoposting only after your generated collage images are available at public URLs:
 
@@ -178,6 +186,7 @@ Example commands:
 ```bash
 python3 scripts/seed_concepts.py
 python3 scripts/run_daily.py
+python3 scripts/sync_awin_feeds.py            # sync AWIN affiliate feeds (or --stats)
 python3 scripts/publish_due.py
 python3 scripts/backfill_metrics.py data/metrics/sample_manual_metrics.json
 python3 scripts/generate_replacement_concept.py <retired_concept_id>
@@ -192,23 +201,11 @@ python3 scripts/regenerate_collage.py /tmp/collage.png image1.png image2.png
 - [Pipeline](docs/pipeline.md): complete end-to-end execution flow
 - [Creative Briefs](docs/creative_briefs.md): structured concept context for preserving nuance
 - [Concept Scoring](docs/concept_scoring.md): daily selection, mirrored posting, ranking scores, and retirement
-- [Product Sourcing](docs/product_sourcing.md): Google Shopping API sourcing, retailer policy, images, and affiliate-link separation
+- [Product Sourcing](docs/product_sourcing.md): Google Shopping API sourcing, the AWIN affiliate catalog, retailer policy, images, and affiliate-link separation
+- [Image Service](docs/image_service.md): Runflow product-isolation cutouts, fallback chain, and tuning knobs
 - [Autoposting](docs/autoposting.md): TikTok/Pinterest posting setup, public asset hosting, and due-post publishing
 - [AI Agents](docs/ai_agents.md): Claude-backed agent setup and saved-response debug files
 - [Agent Prompts](docs/agent_prompts.md): LLM prompt purposes, constraints, versioning, and evaluation
+- [Website](docs/website.md): public-facing frontend, brand direction, and Supabase data layer
 - [API](docs/api.md): internal typed endpoint contracts
 - [Roadmap](docs/roadmap.md): future product and platform ideas
-
-## Future Ideas
-
-- Multi-account support
-- Multi-language support
-- Affiliate network abstraction
-- Dashboard
-- A/B testing
-- Image style versioning
-- Multiple brands
-- Multiple affiliate networks
-- Multiple posting schedules
-- Multiple image styles
-- Multiple agent models

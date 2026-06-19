@@ -80,6 +80,11 @@ class Post:
     published_at: str | None
     created_at: str
     updated_at: str
+    scheduled_for: str | None = None
+    queue_order: str | None = None
+    is_manual_schedule: bool = False
+    approved: bool = True
+    link_check: JsonDict | None = None
     metadata: JsonDict = field(default_factory=dict)
 
 
