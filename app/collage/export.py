@@ -190,11 +190,68 @@ def export_collage(
 
 # Layout geometry
 _PAD = 70                 # outer margin
-_ITEM_GAP = 26            # vertical gap between stacked items in a column
+_ITEM_GAP = 22            # vertical gap between stacked items in a column
 _SPINE_FRACTION = 0.42    # share of usable width for the central apparel+shoe spine
 _FLANK_GAP = 30           # gap between the spine and a side flank
 _APPAREL_ROT = 2.5        # max rotation (deg) for garments + shoes
 _ACCESSORY_ROT = 6.0      # max rotation (deg) for accessories — slightly tilted
+
+# Waist anchor: fraction of content height where tops meet bottoms
+_WAIST_Y_FRAC = 0.50
+# Target waist width as fraction of spine width
+_WAIST_WIDTH_FRAC = 0.60
+
+
+def _measure_edge_width(alpha: "np.ndarray", edge: str, sample_frac: float = 0.06) -> int:
+    """Return avg pixel span (rightmost − leftmost non-transparent col) over edge rows."""
+    try:
+        import numpy as np
+        h = alpha.shape[0]
+        n = max(1, int(h * sample_frac))
+        rows = alpha[-n:] if edge == "bottom" else alpha[:n]
+        spans = []
+        for row in rows:
+            cols = np.where(row > 32)[0]
+            if len(cols) >= 2:
+                spans.append(int(cols[-1] - cols[0]))
+        return int(np.median(spans)) if spans else 0
+    except Exception:
+        return 0
+
+
+def _measure_garment(img_path: Path, zone: str) -> tuple[int, int, int]:
+    """Open an image, trim alpha, then measure waist/hem width.
+
+    Returns (trimmed_w, trimmed_h, waist_width_px).
+    waist_width_px is 0 on any failure.
+    """
+    try:
+        import numpy as np
+        from PIL import Image
+        with Image.open(img_path) as img:
+            img = img.convert("RGBA")
+            img = _trim_alpha(img)
+            w, h = img.size
+            alpha = np.array(img)[:, :, 3]
+            if zone == "top":
+                waist_px = _measure_edge_width(alpha, "bottom")
+            elif zone == "bottom":
+                waist_px = _measure_edge_width(alpha, "top")
+            elif zone in ("dress",):
+                # Approximate waist at 35 % from top
+                row = int(h * 0.35)
+                sample = alpha[max(0, row - 4): row + 5, :]
+                spans = []
+                for r in sample:
+                    c = np.where(r > 32)[0]
+                    if len(c) >= 2:
+                        spans.append(int(c[-1] - c[0]))
+                waist_px = int(np.median(spans)) if spans else 0
+            else:
+                waist_px = 0
+            return w, h, waist_px
+    except Exception:
+        return 1, 1, 0
 
 # Where an accessory sits vertically on a flank, by where it's worn on the body
 # (fraction of usable height for the item's centre). Jewelry / head items ride high.
@@ -297,20 +354,90 @@ def _compute_layout(
 
     placements: list[tuple[int, int, int, int, float] | None] = [None] * n
 
-    # Central spine: core garments (top/bottom/dress) then shoes beneath
-    spine_items = (
-        sorted(apparel, key=lambda i: (_APPAREL_ORDER.get(zones[i], 9), i)) + shoes
-    )
-    if not spine_items and accessories:
-        spine_items, accessories = accessories, []
-
-    spine_w = int(usable_w * _SPINE_FRACTION)
+    spine_w  = int(usable_w * _SPINE_FRACTION)
     spine_cx = (usable_x0 + usable_x1) // 2
-    for i, p in _stack_column(
-        spine_items, col_w=spine_w, col_cx=spine_cx, y0=usable_y0,
-        avail_h=usable_h, zones=zones, rng=rng, max_rot=_APPAREL_ROT,
-    ):
-        placements[i] = p
+    waist_y  = usable_y0 + int(usable_h * _WAIST_Y_FRAC)
+    target_waist_px = int(spine_w * _WAIST_WIDTH_FRAC)
+
+    tops    = sorted([i for i in apparel if zones[i] == "top"],    key=lambda i: i)
+    bottoms = sorted([i for i in apparel if zones[i] == "bottom"], key=lambda i: i)
+    dresses = sorted([i for i in apparel if zones[i] == "dress"],  key=lambda i: i)
+
+    # Height budget for each garment zone
+    _SHOE_RESERVE = 180   # px to leave below bottoms for shoes
+    top_max_h    = waist_y - usable_y0 - _ITEM_GAP
+    bottom_max_h = (usable_y1 - _SHOE_RESERVE) - waist_y
+    dress_max_h  = usable_y1 - usable_y0 - _ITEM_GAP
+
+    def _waist_dims(idx: int, zone: str, max_h: int | None = None) -> tuple[int, int]:
+        orig_w, orig_h, waist_px = _measure_garment(image_paths[idx], zone)
+        if orig_w < 1 or orig_h < 1:
+            return target_waist_px, target_waist_px
+        if waist_px > 10:
+            s = target_waist_px / waist_px
+        else:
+            # Measurement failed — fill ~85 % of spine width
+            s = (spine_w * 0.85) / orig_w
+        dw = int(orig_w * s)
+        dh = int(orig_h * s)
+        if dw > spine_w:          # never wider than spine
+            r = spine_w / dw
+            dw, dh = spine_w, int(dh * r)
+        if max_h is not None and dh > max_h > 0:   # clamp to available height
+            r = max_h / dh
+            dw, dh = int(dw * r), max_h
+        return dw, dh
+
+    # ── Tops: bottom edge at waist_y, stacked upward ─────────────────────────
+    y_above = waist_y
+    for i in tops:
+        dw, dh = _waist_dims(i, "top", max_h=top_max_h)
+        cy = y_above - dh // 2
+        placements[i] = (spine_cx + rng.randint(-8, 8), cy, dw, dh,
+                         rng.uniform(-_APPAREL_ROT, _APPAREL_ROT))
+        y_above -= dh + _ITEM_GAP
+
+    # ── Dresses: waist (≈35 % from top) at waist_y ──────────────────────────
+    for i in dresses:
+        dw, dh = _waist_dims(i, "dress", max_h=dress_max_h)
+        waist_offset = int(dh * 0.35)
+        cy = waist_y - waist_offset + dh // 2
+        placements[i] = (spine_cx + rng.randint(-8, 8), cy, dw, dh,
+                         rng.uniform(-_APPAREL_ROT, _APPAREL_ROT))
+
+    # ── Bottoms: top edge at waist_y, stacked downward ──────────────────────
+    y_below = waist_y
+    for i in bottoms:
+        dw, dh = _waist_dims(i, "bottom", max_h=bottom_max_h)
+        cy = y_below + dh // 2
+        placements[i] = (spine_cx + rng.randint(-8, 8), cy, dw, dh,
+                         rng.uniform(-_APPAREL_ROT, _APPAREL_ROT))
+        y_below += dh + _ITEM_GAP
+
+    # ── Shoes: below the lowest placed garment ──────────────────────────────
+    if shoes:
+        placed_bottoms = [
+            placements[i][1] + placements[i][3] // 2
+            for i in tops + bottoms + dresses
+            if placements[i] is not None
+        ]
+        shoe_y0 = (max(placed_bottoms) if placed_bottoms else waist_y) + _ITEM_GAP
+        shoe_avail = usable_y1 - shoe_y0
+        for i, p in _stack_column(
+            shoes, col_w=spine_w, col_cx=spine_cx, y0=shoe_y0,
+            avail_h=shoe_avail, zones=zones, rng=rng, max_rot=_APPAREL_ROT,
+        ):
+            placements[i] = p
+
+    # Fallback: if nothing on the spine (all accessories), promote accessories
+    if not any(placements[i] is not None for i in range(n) if zones[i] not in _EXTRA_ZONES):
+        if accessories:
+            for i, p in _stack_column(
+                accessories[:3], col_w=spine_w, col_cx=spine_cx, y0=usable_y0,
+                avail_h=usable_h, zones=zones, rng=rng, max_rot=_ACCESSORY_ROT,
+            ):
+                placements[i] = p
+                accessories = [a for a in accessories if a != i]
 
     # Compute flank geometry (needed for both accessories and outerwear)
     spine_left  = spine_cx - spine_w // 2
