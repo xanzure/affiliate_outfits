@@ -11,6 +11,7 @@ export default function AdminLoginPage() {
 
   async function signIn(e: React.FormEvent) {
     e.preventDefault()
+    alert("submit fired")
     setLoading(true)
     setError(null)
     try {
