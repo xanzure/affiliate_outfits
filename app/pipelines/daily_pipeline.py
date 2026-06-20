@@ -52,6 +52,7 @@ class DailyOutfitResult:
     prepared_images: list[PreparedImage]
     collage_path: Path
     collage_id: str | None = None
+    collage_url: str | None = None
 
 
 @dataclass(frozen=True)
@@ -162,7 +163,7 @@ def run_daily_for_brief(
             concept_id=scheduled_brief.concept_id,
             outfit=outfit,
             products=products,
-            collage_path=collage_export.image_path,
+            collage_path=collage.collage_url or collage_export.image_path,
             engagement_output=engagement_output,
         )
         autopublish_posts(conn, publish_result.posts, settings=settings)
@@ -249,7 +250,7 @@ def run_daily_outfit_set_for_concept(
             concept_id=scheduled_concept.concept_id,
             outfits=[result.outfit for result in outfit_results],
             products_by_outfit=[result.products for result in outfit_results],
-            collage_paths=[result.collage_path for result in outfit_results],
+            collage_paths=[result.collage_url or result.collage_path for result in outfit_results],
             engagement_output=engagement_output,
         )
         autopublish_posts(conn, publish_result.posts, settings=settings)
@@ -337,6 +338,7 @@ def _materialize_outfit_output(
         prepared_images=prepared_images,
         collage_path=collage_export.image_path,
         collage_id=collage.id,
+        collage_url=collage.collage_url,
     )
 
 

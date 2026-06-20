@@ -32,7 +32,7 @@ def create_local_publish_records(
     concept_id: str | None = None,
     outfit: Outfit,
     products: list[Product],
-    collage_path: Path,
+    collage_path: Path | str,
     engagement_output: dict[str, Any],
 ) -> LocalPublishResult:
     _validate_engagement_output(engagement_output)
@@ -78,7 +78,7 @@ def create_local_publish_records_for_outfit_set(
     concept_id: str | None = None,
     outfits: list[Outfit],
     products_by_outfit: list[list[Product]],
-    collage_paths: list[Path],
+    collage_paths: list[Path | str],
     engagement_output: dict[str, Any],
     schedule_date_est: str | None = None,
     pinterest_spacing_hours: int = 2,
