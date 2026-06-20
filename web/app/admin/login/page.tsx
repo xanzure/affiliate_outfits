@@ -13,13 +13,21 @@ export default function AdminLoginPage() {
     e.preventDefault()
     setLoading(true)
     setError(null)
-    const supabase = createSupabaseBrowserClient()
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) {
+    try {
+      const supabase = createSupabaseBrowserClient()
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) {
+        setLoading(false)
+        setError(error.message)
+      } else if (data.session) {
+        window.location.href = "/admin/schedule"
+      } else {
+        setLoading(false)
+        setError("No session returned — check Supabase config.")
+      }
+    } catch (err) {
       setLoading(false)
-      setError(error.message)
-    } else {
-      window.location.href = "/admin/schedule"
+      setError(String(err))
     }
   }
 
