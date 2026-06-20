@@ -69,7 +69,10 @@ class Settings:
     tiktok_auto_add_music: bool = True
     tiktok_brand_content_toggle: bool = False
     tiktok_brand_organic_toggle: bool = False
+    pinterest_client_id: str | None = None
+    pinterest_client_secret: str | None = None
     pinterest_access_token: str | None = None
+    pinterest_refresh_token: str | None = None
     pinterest_board_id: str | None = None
     supabase_db_url: str | None = None
 
@@ -120,7 +123,10 @@ def load_settings(env_file: Path | None = None) -> Settings:
         tiktok_auto_add_music=_get_bool(read("TIKTOK_AUTO_ADD_MUSIC", "true")),
         tiktok_brand_content_toggle=_get_bool(read("TIKTOK_BRAND_CONTENT_TOGGLE", "false")),
         tiktok_brand_organic_toggle=_get_bool(read("TIKTOK_BRAND_ORGANIC_TOGGLE", "false")),
+        pinterest_client_id=read("PINTEREST_CLIENT_ID", "") or None,
+        pinterest_client_secret=read("PINTEREST_CLIENT_SECRET", "") or None,
         pinterest_access_token=read("PINTEREST_ACCESS_TOKEN", "") or None,
+        pinterest_refresh_token=read("PINTEREST_REFRESH_TOKEN", "") or None,
         pinterest_board_id=read("PINTEREST_BOARD_ID", "") or None,
         supabase_db_url=read("SUPABASE_DB_URL", "") or None,
     )
