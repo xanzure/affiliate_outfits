@@ -77,6 +77,7 @@ def _handle_run_concept(conn, payload: dict) -> dict:
 
 
 def _outfit_assets(conn, outfit_id: str):
+    import httpx
     from app.config import load_settings
     from app.db.outfits import get_outfit
     from app.db.products import get_product
@@ -85,7 +86,20 @@ def _outfit_assets(conn, outfit_id: str):
     outfit = get_outfit(conn, outfit_id)
     products = [get_product(conn, pid) for pid in outfit.product_ids]
     norm_dir = settings.data_dir / "images" / "normalized"
-    paths = [norm_dir / f"{p.id}.png" for p in products]
+    norm_dir.mkdir(parents=True, exist_ok=True)
+
+    paths = []
+    for p in products:
+        local = norm_dir / f"{p.id}.png"
+        if not local.exists() and p.image_url:
+            log.info("downloading product image %s from storage", p.id[:16])
+            try:
+                resp = httpx.get(p.image_url, timeout=30, follow_redirects=True)
+                resp.raise_for_status()
+                local.write_bytes(resp.content)
+            except Exception as exc:
+                log.warning("failed to download %s: %s", p.id[:16], exc)
+        paths.append(local)
     return settings, outfit, products, paths
 
 
@@ -103,7 +117,7 @@ def _handle_regenerate_collage(conn, payload: dict) -> dict:
     settings, outfit, products, paths = _outfit_assets(conn, outfit_id)
     missing = [str(p) for p in paths if not p.exists()]
     if missing:
-        return {"error": f"missing normalized images: {len(missing)}"}
+        return {"error": f"missing normalized images after download attempt: {len(missing)}"}
 
     out = settings.data_dir / "images" / "collages" / f"{outfit_id}.png"
     categories = [p.category for p in products]
