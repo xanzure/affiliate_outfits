@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import imghdr
 import struct
 import zlib
 from dataclasses import dataclass
@@ -19,19 +18,31 @@ class ImageInfo:
     size_bytes: int
 
 
+def _sniff_image_type(data: bytes) -> str | None:
+    """Detect image type from magic bytes (replaces removed imghdr module)."""
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:2] == b"\xff\xd8":
+        return "jpeg"
+    if data[:6] in {b"GIF87a", b"GIF89a"}:
+        return "gif"
+    if data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    return None
+
+
 def inspect_image(path: Path) -> ImageInfo:
     if not path.exists():
         raise FileNotFoundError(path)
     if not path.is_file():
         raise ValueError(f"image path is not a file: {path}")
 
-    image_type = imghdr.what(path)
-    if image_type == "jpg":
-        image_type = "jpeg"
+    data = path.read_bytes()
+    image_type = _sniff_image_type(data)
     if image_type not in SUPPORTED_IMAGE_TYPES:
         raise ValueError(f"unsupported image type for {path}: {image_type}")
 
-    width, height = read_image_dimensions(path, image_type)
+    width, height = _dimensions_from_bytes(data, image_type)
     if width < 1 or height < 1:
         raise ValueError(f"invalid image dimensions for {path}: {width}x{height}")
 
@@ -45,11 +56,14 @@ def inspect_image(path: Path) -> ImageInfo:
 
 
 def read_image_dimensions(path: Path, image_type: str | None = None) -> tuple[int, int]:
-    image_type = image_type or imghdr.what(path)
+    data = path.read_bytes()
+    image_type = image_type or _sniff_image_type(data)
     if image_type == "jpg":
         image_type = "jpeg"
+    return _dimensions_from_bytes(data, image_type)
 
-    data = path.read_bytes()
+
+def _dimensions_from_bytes(data: bytes, image_type: str | None) -> tuple[int, int]:
     if image_type == "png":
         return _png_dimensions(data)
     if image_type == "jpeg":
