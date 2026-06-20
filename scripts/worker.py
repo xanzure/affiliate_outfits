@@ -126,6 +126,10 @@ def _handle_regenerate_collage(conn, payload: dict) -> dict:
         categories=categories, seed=out.name,
     )
     url = _upload_collage(outfit_id, out)
+    # Append cache-busting timestamp so CDN/browser fetches the fresh image
+    import time as _time
+    if url:
+        url = f"{url}?t={int(_time.time())}"
     manifest = _collage_manifest_with_products(result.manifest, products)
     collages = list_collages_for_outfit(conn, outfit_id)
     if collages:

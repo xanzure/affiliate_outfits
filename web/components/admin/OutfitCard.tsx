@@ -1,8 +1,9 @@
 "use client"
 
-import { useState, useTransition } from "react"
+import { useState, useTransition, useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
 import type { AdminOutfit } from "@/lib/admin"
-import { enqueueJob } from "@/app/admin/(dashboard)/job-actions"
+import { enqueueJob, getJobStatus } from "@/app/admin/(dashboard)/job-actions"
 import { deleteOutfit } from "@/app/admin/(dashboard)/outfits/actions"
 
 function Badge({ on, label }: { on: boolean; label: string }) {
@@ -24,18 +25,36 @@ function price(cents: number | null, currency: string): string {
 }
 
 export default function OutfitCard({ outfit }: { outfit: AdminOutfit }) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const [pending, start] = useTransition()
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const job = (type: "regenerate_image" | "regenerate_collage") => () => {
+  const enqueueAndPoll = (type: "regenerate_image" | "regenerate_collage") => () => {
     setMsg(null)
     start(async () => {
-      await enqueueJob(type, { outfit_id: outfit.id })
-      setMsg("Queued — the worker will pick it up.")
+      const jobId = await enqueueJob(type, { outfit_id: outfit.id })
+      setMsg("Queued…")
+      pollRef.current = setInterval(async () => {
+        const { status } = await getJobStatus(jobId)
+        if (status === "done") {
+          clearInterval(pollRef.current!)
+          setMsg(null)
+          router.refresh()
+        } else if (status === "failed") {
+          clearInterval(pollRef.current!)
+          setMsg("Job failed — check Activity log.")
+        } else {
+          setMsg(status === "running" ? "Running…" : "Queued…")
+        }
+      }, 2500)
     })
   }
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current) }, [])
+
 
   return (
     <>
@@ -102,14 +121,14 @@ export default function OutfitCard({ outfit }: { outfit: AdminOutfit }) {
 
             <div className="mt-5 flex flex-wrap gap-2">
               <button
-                onClick={job("regenerate_image")}
+                onClick={enqueueAndPoll("regenerate_image")}
                 disabled={pending}
                 className="rounded-sm border border-line px-3 py-2 text-xs uppercase tracking-wider text-foreground hover:border-accent hover:text-accent disabled:opacity-40"
               >
                 Regenerate images
               </button>
               <button
-                onClick={job("regenerate_collage")}
+                onClick={enqueueAndPoll("regenerate_collage")}
                 disabled={pending}
                 className="rounded-sm border border-line px-3 py-2 text-xs uppercase tracking-wider text-foreground hover:border-accent hover:text-accent disabled:opacity-40"
               >
