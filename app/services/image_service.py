@@ -32,7 +32,7 @@ _RUNFLOW_ASPECT_RATIO = "3:4"  # portrait frame fits most fashion items without 
 # u2net_human_seg: human silhouette segmentation — used to DETECT model shots.
 # isnet-general-use: high-quality general object cutout — used to REMOVE backgrounds.
 _HUMAN_SEG_MODEL = "u2net_human_seg"
-_CUTOUT_MODEL = "isnet-general-use"
+_CUTOUT_MODEL = "u2netp"
 
 # ── classification thresholds (tunable) ─────────────────────────────────────────
 # Fraction of image area that must be "human" for an image to count as a model shot.
