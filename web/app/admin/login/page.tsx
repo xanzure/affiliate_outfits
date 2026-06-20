@@ -1,11 +1,9 @@
 "use client"
 
 import { useState } from "react"
-import { useRouter } from "next/navigation"
 import { createSupabaseBrowserClient } from "@/lib/supabase/client"
 
 export default function AdminLoginPage() {
-  const router = useRouter()
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
@@ -17,12 +15,11 @@ export default function AdminLoginPage() {
     setError(null)
     const supabase = createSupabaseBrowserClient()
     const { error } = await supabase.auth.signInWithPassword({ email, password })
-    setLoading(false)
     if (error) {
-      setError("Invalid email or password.")
+      setLoading(false)
+      setError(error.message)
     } else {
-      router.push("/admin/schedule")
-      router.refresh()
+      window.location.href = "/admin/schedule"
     }
   }
 
