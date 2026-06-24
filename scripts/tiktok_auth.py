@@ -21,7 +21,7 @@ import os
 import secrets
 import sys
 from pathlib import Path
-from urllib.parse import urlencode
+from urllib.parse import urlencode, unquote
 from urllib.request import Request, urlopen
 
 # Load .env
@@ -100,6 +100,7 @@ def cmd_exchange(code: str) -> None:
         print("Error: run 'url' command first to generate a code verifier")
         sys.exit(1)
     verifier = _VERIFIER_FILE.read_text().strip()
+    code = unquote(code)  # decode %2A → * etc from URL bar copy-paste
     data = _post_form(TOKEN_URL, {
         "client_key": CLIENT_KEY,
         "client_secret": CLIENT_SECRET,
