@@ -14,7 +14,6 @@ Requires in .env:
 """
 from __future__ import annotations
 
-import base64
 import hashlib
 import json
 import os
@@ -37,7 +36,6 @@ REDIRECT_URI = os.environ.get("TIKTOK_REDIRECT_URI", "http://localhost:3100/")
 SCOPE = "user.info.basic,video.publish"
 
 TOKEN_URL = "https://open.tiktokapis.com/v2/oauth/token/"
-_VERIFIER_FILE = Path(__file__).parent / ".tiktok_code_verifier"
 
 
 def _require_credentials() -> None:
@@ -47,9 +45,11 @@ def _require_credentials() -> None:
 
 
 def _make_pkce() -> tuple[str, str]:
-    verifier = base64.urlsafe_b64encode(secrets.token_bytes(32)).rstrip(b"=").decode()
-    digest = hashlib.sha256(verifier.encode()).digest()
-    challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode()
+    # TikTok uses NON-STANDARD PKCE: code_challenge is the lowercase hex of the
+    # SHA256 digest, not base64url. The verifier must be hex too (TikTok requires
+    # it match [A-Za-z0-9-._~] and they document hex specifically).
+    verifier = secrets.token_hex(32)
+    challenge = hashlib.sha256(verifier.encode()).hexdigest()
     return verifier, challenge
 
 
