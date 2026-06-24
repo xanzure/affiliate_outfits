@@ -189,15 +189,15 @@ def export_collage(
 # ── placement logic ────────────────────────────────────────────────────────────
 
 # Layout geometry
-_PAD = 70                 # outer margin
+_PAD = 50                 # outer margin
 _ITEM_GAP = 22            # vertical gap between stacked items in a column
-_SPINE_FRACTION = 0.42    # share of usable width for the central apparel+shoe spine
-_FLANK_GAP = 30           # gap between the spine and a side flank
+_SPINE_FRACTION = 0.50    # share of usable width for the central apparel+shoe spine
+_FLANK_GAP = 18           # gap between the spine and a side flank
 _APPAREL_ROT = 2.5        # max rotation (deg) for garments + shoes
 _ACCESSORY_ROT = 6.0      # max rotation (deg) for accessories — slightly tilted
 
 # Waist anchor: fraction of content height where tops meet bottoms
-_WAIST_Y_FRAC = 0.50
+_WAIST_Y_FRAC = 0.40
 # Target waist width as fraction of spine width
 _WAIST_WIDTH_FRAC = 0.60
 
@@ -255,9 +255,9 @@ def _measure_garment(img_path: Path, zone: str) -> tuple[int, int, int]:
 
 # Where an accessory sits vertically on a flank, by where it's worn on the body
 # (fraction of usable height for the item's centre). Jewelry / head items ride high.
-_FLANK_ANCHOR: dict[str, float] = {"accessory": 0.20, "bag": 0.48}
+_FLANK_ANCHOR: dict[str, float] = {"accessory": 0.22, "bag": 0.58}
 # Target height of a flank accessory (fraction of usable height)
-_FLANK_HEIGHT: dict[str, float] = {"accessory": 0.18, "bag": 0.34}
+_FLANK_HEIGHT: dict[str, float] = {"accessory": 0.16, "bag": 0.26}
 
 
 def _place_flank(
@@ -364,7 +364,10 @@ def _compute_layout(
     dresses = sorted([i for i in apparel if zones[i] == "dress"],  key=lambda i: i)
 
     # Height budget for each garment zone
-    _SHOE_RESERVE = 180   # px to leave below bottoms for shoes
+    # ponytail: small reserve — shoes place dynamically below the lowest garment
+    # and may overlap the jean hem (realistic for boots), so bottoms no longer
+    # need to surrender a big strip that strangled their width.
+    _SHOE_RESERVE = 60   # px to leave below bottoms for shoes
     top_max_h    = waist_y - usable_y0 - _ITEM_GAP
     bottom_max_h = (usable_y1 - _SHOE_RESERVE) - waist_y
     dress_max_h  = usable_y1 - usable_y0 - _ITEM_GAP
@@ -414,7 +417,9 @@ def _compute_layout(
                          rng.uniform(-_APPAREL_ROT, _APPAREL_ROT))
         y_below += dh + _ITEM_GAP
 
-    # ── Shoes: below the lowest placed garment ──────────────────────────────
+    # ── Shoes: below the lowest placed garment, at a guaranteed target size ──
+    # ponytail: fixed target box, not leftover space — fitting a tall boot into
+    # whatever scraps remained was what made shoes render tiny.
     if shoes:
         placed_bottoms = [
             placements[i][1] + placements[i][3] // 2
@@ -422,12 +427,15 @@ def _compute_layout(
             if placements[i] is not None
         ]
         shoe_y0 = (max(placed_bottoms) if placed_bottoms else waist_y) + _ITEM_GAP
-        shoe_avail = usable_y1 - shoe_y0
-        for i, p in _stack_column(
-            shoes, col_w=spine_w, col_cx=spine_cx, y0=shoe_y0,
-            avail_h=shoe_avail, zones=zones, rng=rng, max_rot=_APPAREL_ROT,
-        ):
-            placements[i] = p
+        shoe_target_h = int(usable_h * 0.18)
+        shoe_box_w = int(spine_w * 0.80)
+        y = shoe_y0
+        for i in shoes:
+            cy = min(y + shoe_target_h // 2, usable_y1 - shoe_target_h // 2)
+            placements[i] = (spine_cx + rng.randint(-8, 8), cy,
+                             shoe_box_w, shoe_target_h,
+                             rng.uniform(-_APPAREL_ROT, _APPAREL_ROT))
+            y += shoe_target_h + _ITEM_GAP
 
     # Fallback: if nothing on the spine (all accessories), promote accessories
     if not any(placements[i] is not None for i in range(n) if zones[i] not in _EXTRA_ZONES):
