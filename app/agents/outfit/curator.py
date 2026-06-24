@@ -51,9 +51,14 @@ that name actual retailers and specific product silhouettes.
 ## Cached Product Inventory (already sourced, images ready — prefer these when they fit)
 {cached_inventory}
 
+## Required Composition (MANDATORY — the layout depends on it)
+Each outfit MUST contain EXACTLY the item types listed for it, one product per type,
+and its items[] array MUST be in this exact order. Do not add, drop, or reorder items.
+{composition}
+
 Generate {outfit_count} distinct, opinionated outfit{plural}. Each must:
 - Tell a coherent visual story — not just random pieces thrown together
-- Be COMPLETE: minimum top + bottom + shoe (or dress + shoe). Accessories encouraged.
+- Contain exactly the item types required for it above, in order
 - Reference specific retailers and product names in search queries, not generic terms
 - Differ meaningfully from each other in silhouette, color story, or mood
 - Prefer cached inventory items when they genuinely fit — note them with use_cached_url field
@@ -135,6 +140,26 @@ def make_curator_service() -> ClaudeJSONService:
     return ClaudeJSONService(model=_OPUS_MODEL)
 
 
+def _choose_templates(outfit_count: int, brief: dict[str, Any]) -> list[str]:
+    """Pick one collage template per outfit — distinct where possible, seeded by
+    the brief so a given concept is reproducible."""
+    import random
+    from app.collage.html_export import list_templates
+
+    names = [t.name for t in list_templates()]
+    rng = random.Random(json.dumps(brief, sort_keys=True))
+    rng.shuffle(names)
+    if outfit_count <= len(names):
+        return names[:outfit_count]
+    # more outfits than templates — cycle, reshuffling each pass
+    out = list(names)
+    while len(out) < outfit_count:
+        extra = list(names)
+        rng.shuffle(extra)
+        out.extend(extra)
+    return out[:outfit_count]
+
+
 def generate_outfit_specs(
     brief: dict[str, Any],
     outfit_count: int,
@@ -143,9 +168,18 @@ def generate_outfit_specs(
     service: ClaudeJSONService | None = None,
     cached_products: list[dict[str, Any]] | None = None,
 ) -> list[dict[str, Any]]:
-    """Generate outfit specs with the curator."""
+    """Generate outfit specs with the curator, each forced into a collage template."""
+    from app.collage.html_export import template_requirement_labels
+
     service = service or make_curator_service()
     plural = "s" if outfit_count != 1 else ""
+
+    chosen_templates = _choose_templates(outfit_count, brief)
+    composition_lines = []
+    for idx, tname in enumerate(chosen_templates, start=1):
+        items = ", ".join(template_requirement_labels(tname))
+        composition_lines.append(f"Outfit {idx}: {items}")
+    composition = "\n".join(composition_lines)
 
     if cached_products:
         inventory_lines = []
@@ -167,6 +201,7 @@ def generate_outfit_specs(
             brief=json.dumps(brief, indent=2),
             history=json.dumps(history, indent=2) if history else "[]",
             cached_inventory=cached_inventory,
+            composition=composition,
         ),
         system=_CURATOR_SYSTEM,
     )
@@ -174,6 +209,11 @@ def generate_outfit_specs(
     outfits = data.get("outfits", [])
     if not isinstance(outfits, list) or not outfits:
         raise ValueError(f"Curator returned no outfits: {data}")
+    # Tag each spec with the template it was generated for, so the collage
+    # renders with the same layout the items were sourced for.
+    for spec, tname in zip(outfits, chosen_templates):
+        if isinstance(spec, dict):
+            spec["template"] = tname
     log.info("Curator generated %d outfit spec(s)", len(outfits))
     return outfits
 
@@ -282,4 +322,5 @@ def outfit_spec_to_pipeline_format(outfit_spec: dict[str, Any]) -> dict[str, Any
         },
         "search_queries": outfit_spec_to_search_queries(outfit_spec),
         "diversity_notes": [],
+        "template": outfit_spec.get("template"),
     }

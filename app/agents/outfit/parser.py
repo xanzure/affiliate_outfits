@@ -20,12 +20,16 @@ def normalize_outfit_agent_output(payload: dict[str, Any]) -> dict[str, Any]:
     search_queries = _normalize_search_queries(payload["search_queries"])
     diversity_notes = _string_list(payload["diversity_notes"], "diversity_notes", allow_empty=True)
 
-    return {
+    result = {
         "interpretation": interpretation,
         "outfit": outfit,
         "search_queries": search_queries,
         "diversity_notes": diversity_notes,
     }
+    # Preserve the collage template tag if the generator set one.
+    if payload.get("template"):
+        result["template"] = payload["template"]
+    return result
 
 
 def normalize_outfit_agent_outputs(

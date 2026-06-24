@@ -21,7 +21,7 @@ from app.db.collages import create_collage
 from app.db.concepts import get_concept, update_concept_metadata
 from app.db.models import Outfit, Product
 from app.db.outfits import create_outfit, update_outfit_spec
-from app.pipelines.collage_pipeline import render_collage_manifest_for_images
+from app.pipelines.collage_pipeline import render_html_collage_for_images
 from app.pipelines.image_pipeline import prepare_product_images
 from app.pipelines.publish_pipeline import (
     LocalPublishResult,
@@ -119,7 +119,7 @@ def run_daily_for_brief(
     _step("Rendering collage...", 5, 5)
     batch_style = generate_batch_visual_style(scheduled_brief.seed)
     categories = [p.category for p in products]
-    collage_export = render_collage_manifest_for_images(
+    collage_export = render_html_collage_for_images(
         prepared_images,
         output_name=f"{outfit.id}.png",
         settings=settings,
@@ -127,6 +127,7 @@ def run_daily_for_brief(
         concept_name=scheduled_brief.seed,
         outfit_number=1,
         categories=categories,
+        template_name=outfit_output.get("template"),
     )
     style_meta = {
         "background_hex": batch_style.background_hex,
@@ -298,7 +299,7 @@ def _materialize_outfit_output(
         image_service=ImageService(settings),
     )
     categories = [p.category for p in products]
-    collage_export = render_collage_manifest_for_images(
+    collage_export = render_html_collage_for_images(
         prepared_images,
         output_name=f"{outfit.id}-{output_name_suffix}.png",
         settings=settings,
@@ -306,6 +307,7 @@ def _materialize_outfit_output(
         concept_name=scheduled_concept.seed,
         outfit_number=outfit_number,
         categories=categories,
+        template_name=outfit_output.get("template"),
     )
     style_meta = {}
     if batch_style:

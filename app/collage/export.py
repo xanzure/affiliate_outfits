@@ -256,8 +256,35 @@ def _measure_garment(img_path: Path, zone: str) -> tuple[int, int, int]:
 # Where an accessory sits vertically on a flank, by where it's worn on the body
 # (fraction of usable height for the item's centre). Jewelry / head items ride high.
 _FLANK_ANCHOR: dict[str, float] = {"accessory": 0.22, "bag": 0.58}
-# Target height of a flank accessory (fraction of usable height)
-_FLANK_HEIGHT: dict[str, float] = {"accessory": 0.16, "bag": 0.26}
+
+# Per-accessory size as (flank-width fraction, usable-height fraction). A hat is
+# wide so it needs a high width cap or it stays tiny; earrings are small both ways.
+# Keyed on a keyword found in the category string; falls back to "default".
+_ACC_SIZE: dict[str, tuple[float, float]] = {
+    "hat":        (0.95, 0.20),
+    "cap":        (0.95, 0.20),
+    "scarf":      (0.72, 0.16),
+    "belt":       (0.72, 0.13),
+    "sunglasses": (0.55, 0.10),
+    "glasses":    (0.55, 0.10),
+    "earring":    (0.42, 0.09),
+    "earrings":   (0.42, 0.09),
+    "jewelry":    (0.42, 0.09),
+    "necklace":   (0.45, 0.11),
+    "ring":       (0.38, 0.08),
+    "bracelet":   (0.42, 0.09),
+    "watch":      (0.42, 0.09),
+    "bag":        (0.95, 0.26),
+    "default":    (0.58, 0.16),
+}
+
+
+def _acc_size(category: str | None) -> tuple[float, float]:
+    c = (category or "").lower()
+    for word in reversed(re.findall(r"[a-z]+", c)):  # head noun first
+        if word in _ACC_SIZE:
+            return _ACC_SIZE[word]
+    return _ACC_SIZE["default"]
 
 
 def _place_flank(
@@ -268,6 +295,7 @@ def _place_flank(
     y0: int,
     usable_h: int,
     zones: list[str],
+    categories: list[str | None],
     rng: random.Random,
 ) -> list[tuple[int, tuple[int, int, int, int, float]]]:
     """Place flank accessories at a body-appropriate height (head items high),
@@ -277,8 +305,9 @@ def _place_flank(
     prev_bottom = y0
     for i in ordered:
         z = zones[i]
-        box_w = int(flank_w * _TIER_MAX_WIDTH[z])
-        box_h = int(usable_h * _FLANK_HEIGHT.get(z, 0.20))
+        w_frac, h_frac = _acc_size(categories[i])
+        box_w = int(flank_w * w_frac)
+        box_h = int(usable_h * h_frac)
         cy = int(y0 + _FLANK_ANCHOR.get(z, 0.40) * usable_h)
         if cy - box_h // 2 < prev_bottom + _ITEM_GAP:
             cy = prev_bottom + _ITEM_GAP + box_h // 2
@@ -463,16 +492,19 @@ def _compute_layout(
     for items, fw, fcx in ((right_acc, right_w, right_cx), (left_acc, left_w, left_cx)):
         for i, p in _place_flank(
             items, flank_w=fw, flank_cx=fcx, y0=usable_y0,
-            usable_h=usable_h, zones=zones, rng=rng,
+            usable_h=usable_h, zones=zones, categories=categories, rng=rng,
         ):
             placements[i] = p
 
-    # Outerwear: goes on whichever flank has fewer accessories (editorial side column)
+    # Outerwear: editorial side column, but sized like a real garment — not capped
+    # to the narrow flank width (that made coats read tiny). Widen toward the spine
+    # and clamp the centre so it never clips the canvas edge.
     if outerwear:
-        if len(left_acc) <= len(right_acc):
-            ow_cx, ow_w = left_cx, left_w
-        else:
-            ow_cx, ow_w = right_cx, right_w
+        left_side = len(left_acc) <= len(right_acc)
+        ow_w = max(left_w if left_side else right_w, int(spine_w * 0.62))
+        base_cx = left_cx if left_side else right_cx
+        half = ow_w // 2
+        ow_cx = min(max(base_cx, usable_x0 + half), usable_x1 - half)
         for i, p in _stack_column(
             outerwear, col_w=ow_w, col_cx=ow_cx, y0=usable_y0,
             avail_h=usable_h, zones=zones, rng=rng, max_rot=_APPAREL_ROT,
