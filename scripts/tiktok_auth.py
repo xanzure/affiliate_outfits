@@ -77,7 +77,6 @@ def _print_tokens(data: dict) -> None:
 def cmd_url() -> None:
     _require_credentials()
     verifier, challenge = _make_pkce()
-    _VERIFIER_FILE.write_text(verifier)
     params = urlencode({
         "client_key": CLIENT_KEY,
         "scope": SCOPE,
@@ -89,18 +88,13 @@ def cmd_url() -> None:
     })
     print("Open this URL in your browser and authorize with your TikTok account:\n")
     print(f"https://www.tiktok.com/v2/auth/authorize/?{params}")
-    print(f"\nAfter authorizing, you'll be redirected to:\n  {REDIRECT_URI}?code=XXXX&state=vance_auth")
-    print("\nCopy the 'code' value from the URL and run:")
-    print("  python scripts/tiktok_auth.py exchange <CODE>")
+    print(f"\nAfter authorizing, copy the 'code' from the redirect URL and run:")
+    print(f"\n  python scripts/tiktok_auth.py exchange <CODE> {verifier}\n")
 
 
-def cmd_exchange(code: str) -> None:
+def cmd_exchange(code: str, verifier: str) -> None:
     _require_credentials()
-    if not _VERIFIER_FILE.exists():
-        print("Error: run 'url' command first to generate a code verifier")
-        sys.exit(1)
-    verifier = _VERIFIER_FILE.read_text().strip()
-    code = unquote(code)  # decode %2A → * etc from URL bar copy-paste
+    code = unquote(code)
     data = _post_form(TOKEN_URL, {
         "client_key": CLIENT_KEY,
         "client_secret": CLIENT_SECRET,
@@ -109,7 +103,6 @@ def cmd_exchange(code: str) -> None:
         "redirect_uri": REDIRECT_URI,
         "code_verifier": verifier,
     })
-    _VERIFIER_FILE.unlink(missing_ok=True)
     _print_tokens(data)
 
 
@@ -133,10 +126,11 @@ if __name__ == "__main__":
     if cmd == "url":
         cmd_url()
     elif cmd == "exchange":
-        if len(sys.argv) < 3:
-            print("Usage: python scripts/tiktok_auth.py exchange <CODE>")
+        if len(sys.argv) < 4:
+            print("Usage: python scripts/tiktok_auth.py exchange <CODE> <VERIFIER>")
+            print("(The verifier is printed by the 'url' command)")
             sys.exit(1)
-        cmd_exchange(sys.argv[2])
+        cmd_exchange(sys.argv[2], sys.argv[3])
     elif cmd == "refresh":
         cmd_refresh()
     else:
