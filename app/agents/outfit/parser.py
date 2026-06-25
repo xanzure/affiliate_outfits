@@ -26,9 +26,10 @@ def normalize_outfit_agent_output(payload: dict[str, Any]) -> dict[str, Any]:
         "search_queries": search_queries,
         "diversity_notes": diversity_notes,
     }
-    # Preserve the collage template tag if the generator set one.
-    if payload.get("template"):
-        result["template"] = payload["template"]
+    # Preserve generator tags (collage template, style facet, gender presentation).
+    for tag in ("template", "facet", "gender"):
+        if payload.get(tag):
+            result[tag] = payload[tag]
     return result
 
 

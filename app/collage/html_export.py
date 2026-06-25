@@ -125,6 +125,46 @@ _ZONE_LABEL = {
 }
 
 
+# ── Type-locked sizes ───────────────────────────────────────────────────────
+# Size is a property of the ITEM TYPE, not the template slot. The template only
+# decides WHERE a piece goes (the slot's centre); this decides HOW BIG it is.
+# (width % of canvas, height % of stage). A coat is always large, earrings always
+# small, regardless of which slot they land in.
+_TYPE_SIZE: dict[str, tuple[float, float]] = {
+    "outerwear": (30, 50),   # coats/blazers — large
+    "top":       (40, 40),
+    "bottom":    (35, 52),
+    "dress":     (40, 64),
+    "shoe":      (17, 19),
+    "bag":       (19, 20),
+    "hat":       (19, 17),
+    "scarf":     (17, 16),
+    "belt":      (16, 12),
+    "sunglasses": (14, 9),
+    "earrings":  (10, 11),   # jewelry — small
+    "accessory": (15, 14),   # default accessory
+}
+
+
+def _size_class(category: str | None, zone: str) -> str:
+    """Resolve an item to a size bucket. Garment zones map 1:1; accessories split
+    into hat / jewelry / belt / scarf / sunglasses so each gets its own size."""
+    if zone != "accessory":
+        return zone
+    c = (category or "").lower()
+    if "hat" in c or "cap" in c:
+        return "hat"
+    if any(k in c for k in ("earring", "jewelry", "necklace", "ring", "bracelet", "watch")):
+        return "earrings"
+    if "sunglass" in c or "glasses" in c:
+        return "sunglasses"
+    if "belt" in c:
+        return "belt"
+    if "scarf" in c:
+        return "scarf"
+    return "accessory"
+
+
 def list_templates() -> list[Template]:
     return list(_TEMPLATES)
 
@@ -176,6 +216,7 @@ def _assign(zones: list[str], template: Template) -> dict[int, Slot]:
 def build_html(
     image_urls: list[str],
     zones: list[str],
+    categories: list[str | None],
     *,
     concept_name: str,
     outfit_number: int,
@@ -184,8 +225,8 @@ def build_html(
     font_style: str,
     template_name: str | None = None,
 ) -> tuple[str, dict]:
-    """Return (html, manifest). Manifest carries each product's slot box in
-    canvas pixels for the website's shoppable overlay."""
+    """Return (html, manifest). Manifest carries each product's box in canvas
+    pixels for the website's shoppable overlay."""
     template = (template_name and get_template(template_name)) or _pick_template(zones)
     assignment = _assign(zones, template)
     font = _FONT_STACK.get(font_style, _FONT_STACK["sans"])
@@ -195,20 +236,26 @@ def build_html(
         slot = assignment.get(i)
         if slot is None:
             continue
+        # Size comes from the item TYPE; the slot only provides the anchor (its
+        # centre). So a coat is always large and earrings always small, wherever
+        # the template places them.
+        w, h = _TYPE_SIZE.get(_size_class(categories[i], zones[i]), _TYPE_SIZE["accessory"])
+        cx = slot.left + slot.width / 2
+        cy = slot.top + slot.height / 2
+        left = round(cx - w / 2, 2)
+        top = round(cy - h / 2, 2)
         divs.append(
-            f'<div class="piece" style="left:{slot.left}%;top:{slot.top}%;'
-            f'width:{slot.width}%;height:{slot.height}%;'
+            f'<div class="piece" style="left:{left}%;top:{top}%;'
+            f'width:{w}%;height:{h}%;'
             f'transform:rotate({slot.rot}deg);z-index:{slot.z};">'
             f'<img src="{url}"></div>'
         )
-        # ponytail: slot box, not the contained-image bbox — close enough for
-        # hotspots; tighten only if overlays feel off.
         pieces.append({
             "index": i,
-            "x": int(slot.left / 100 * CANVAS_W),
-            "y": int(slot.top / 100 * STAGE_H),
-            "width": int(slot.width / 100 * CANVAS_W),
-            "height": int(slot.height / 100 * STAGE_H),
+            "x": int(left / 100 * CANVAS_W),
+            "y": int(top / 100 * STAGE_H),
+            "width": int(w / 100 * CANVAS_W),
+            "height": int(h / 100 * STAGE_H),
             "rotation": slot.rot,
             "z_index": slot.z,
         })
@@ -239,7 +286,7 @@ def render_collage(
 
     zones = [_resolve_zone(c) for c in categories]
     html, manifest = build_html(
-        image_urls, zones,
+        image_urls, zones, categories,
         concept_name=concept_name, outfit_number=outfit_number,
         bg_hex=style.background_hex if style else "#EFE9DF",
         accent_hex=style.accent_hex if style else "#2A2018",

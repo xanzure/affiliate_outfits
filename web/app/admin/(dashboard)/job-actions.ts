@@ -4,7 +4,13 @@ import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 
 export async function enqueueJob(
-  type: "regenerate_image" | "regenerate_collage" | "run_concept" | "link_check",
+  type:
+    | "regenerate_image"
+    | "regenerate_collage"
+    | "run_concept"
+    | "link_check"
+    | "intake_product"
+    | "reprocess_product",
   payload: Record<string, unknown> = {}
 ): Promise<string> {
   const sb = createAdminClient()

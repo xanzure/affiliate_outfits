@@ -26,6 +26,7 @@ class ClaudeJSONService:
         *,
         model: str | None = None,
         thinking_budget: int | None = None,
+        effort: str | None = None,
     ) -> None:
         self.settings = settings or load_settings()
         if not self.settings.anthropic_api_key:
@@ -34,6 +35,9 @@ class ClaudeJSONService:
             )
         self._model = model or self.settings.anthropic_model
         self._thinking_budget = thinking_budget
+        # effort: "low"|"medium"|"high"|"max" — GA on Opus 4.6+/Sonnet 4.6, controls
+        # reasoning depth + token spend. Replaces budget_tokens on Opus 4.7/4.8.
+        self._effort = effort
 
     def request_json(self, prompt: LLMPrompt) -> dict:
         try:
@@ -47,7 +51,7 @@ class ClaudeJSONService:
 
         kwargs: dict = dict(
             model=self._model,
-            max_tokens=16000 if self._thinking_budget else 4096,
+            max_tokens=16000 if (self._thinking_budget or self._effort) else 4096,
             system=prompt.system,
             messages=[
                 {
@@ -60,7 +64,11 @@ class ClaudeJSONService:
                 }
             ],
         )
-        if self._thinking_budget:
+        if self._effort:
+            # Modern Opus 4.7/4.8 path: adaptive thinking + effort (NOT budget_tokens).
+            kwargs["thinking"] = {"type": "adaptive"}
+            kwargs["output_config"] = {"effort": self._effort}
+        elif self._thinking_budget:
             kwargs["thinking"] = {"type": "enabled", "budget_tokens": self._thinking_budget}
 
         response = client.messages.create(**kwargs)

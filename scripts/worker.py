@@ -104,9 +104,10 @@ def _outfit_assets(conn, outfit_id: str):
 
 
 def _handle_regenerate_collage(conn, payload: dict) -> dict:
-    from app.collage.export import export_collage
+    from types import SimpleNamespace
     from app.db.collages import list_collages_for_outfit
     from app.db.outfits import update_outfit_spec
+    from app.pipelines.collage_pipeline import render_html_collage_for_images
     from app.pipelines.daily_pipeline import (
         _collage_manifest_with_products,
         _spec_with_website_layout,
@@ -119,13 +120,19 @@ def _handle_regenerate_collage(conn, payload: dict) -> dict:
     if missing:
         return {"error": f"missing normalized images after download attempt: {len(missing)}"}
 
-    out = settings.data_dir / "images" / "collages" / f"{outfit_id}.png"
     categories = [p.category for p in products]
-    result = export_collage(
-        paths, out, concept_name=outfit.concept_seed, outfit_number=1,
-        categories=categories, seed=out.name,
+    # Use the HTML/CSS template renderer (same as a fresh concept), with the
+    # template the outfit was generated for — NOT the old PIL geometry engine.
+    result = render_html_collage_for_images(
+        [SimpleNamespace(normalized_path=p) for p in paths],
+        output_name=f"{outfit_id}.png",
+        settings=settings,
+        concept_name=outfit.concept_seed,
+        outfit_number=1,
+        categories=categories,
+        template_name=outfit.spec.get("template"),
     )
-    url = _upload_collage(outfit_id, out)
+    url = _upload_collage(outfit_id, result.image_path)
     # Append cache-busting timestamp so CDN/browser fetches the fresh image
     import time as _time
     if url:

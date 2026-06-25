@@ -29,9 +29,13 @@ def generate_outfit_with_llm(
     *,
     llm_service: ClaudeJSONService | None = None,
     cached_products: list[dict[str, Any]] | None = None,
+    facets: list[str] | None = None,
 ) -> dict[str, Any]:
     service = llm_service or make_curator_service()
-    specs = generate_outfit_specs(brief, 1, history or [], service=service, cached_products=cached_products)
+    specs = generate_outfit_specs(
+        brief, 1, history or [], service=service,
+        cached_products=cached_products, facets=facets,
+    )
     return normalize_outfit_agent_output(outfit_spec_to_pipeline_format(specs[0]))
 
 
@@ -42,9 +46,13 @@ def generate_outfit_batch_with_llm(
     outfit_count: int,
     llm_service: ClaudeJSONService | None = None,
     cached_products: list[dict[str, Any]] | None = None,
+    facets: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     service = llm_service or make_curator_service()
-    specs = generate_outfit_specs(brief, outfit_count, history or [], service=service, cached_products=cached_products)
+    specs = generate_outfit_specs(
+        brief, outfit_count, history or [], service=service,
+        cached_products=cached_products, facets=facets,
+    )
     return normalize_outfit_agent_outputs(
         {"outfits": [outfit_spec_to_pipeline_format(s) for s in specs]},
         expected_count=outfit_count,

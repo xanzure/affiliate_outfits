@@ -16,7 +16,11 @@ from app.services.llm_service import ClaudeJSONService, LLMPrompt
 
 log = logging.getLogger(__name__)
 
-_OPUS_MODEL = "claude-sonnet-4-6"
+# Opus 4.8 leads on creative taste/range (what makes a broad concept diverse);
+# low effort keeps deliberation + cost down — the facet system supplies structural
+# diversity, so we don't need to pay for high effort.
+_CURATOR_MODEL = "claude-opus-4-8"
+_CURATOR_EFFORT = "low"
 
 _STORE_KNOWLEDGE = (
     Path(__file__).parent / "store_knowledge.md"
@@ -51,16 +55,24 @@ that name actual retailers and specific product silhouettes.
 ## Cached Product Inventory (already sourced, images ready — prefer these when they fit)
 {cached_inventory}
 
-## Required Composition (MANDATORY — the layout depends on it)
-Each outfit MUST contain EXACTLY the item types listed for it, one product per type,
-and its items[] array MUST be in this exact order. Do not add, drop, or reorder items.
+## Per-Outfit Brief (MANDATORY — follow every field exactly)
+Each outfit below specifies a STYLE DIRECTION, a GENDER PRESENTATION, and its
+required ITEM TYPES. For each outfit you MUST:
+- Anchor the whole outfit to its **direction** — this is a specific facet of the
+  concept. Two outfits with different directions should look like different
+  worlds (e.g. "tropical resort" vs "Y2K streetwear"), not minor variations.
+- Make every item consistent with its **presentation** (feminine or masculine) —
+  reflect it in the search queries ("women's…" / "men's…") and silhouettes.
+- Contain EXACTLY the listed item types, one product per type, items[] in that order.
 {composition}
 
 Generate {outfit_count} distinct, opinionated outfit{plural}. Each must:
+- Fully commit to its assigned direction and presentation above
 - Tell a coherent visual story — not just random pieces thrown together
 - Contain exactly the item types required for it above, in order
 - Reference specific retailers and product names in search queries, not generic terms
-- Differ meaningfully from each other in silhouette, color story, or mood
+- NOT repeat any outfit in "Previously Generated Outfits" — different items AND a
+  different feel
 - Prefer cached inventory items when they genuinely fit — note them with use_cached_url field
 
 ## CRITICAL: describe items as they are SOLD, never how they are STYLED
@@ -148,7 +160,7 @@ class CuratorReview:
 
 
 def make_curator_service() -> ClaudeJSONService:
-    return ClaudeJSONService(model=_OPUS_MODEL)
+    return ClaudeJSONService(model=_CURATOR_MODEL, effort=_CURATOR_EFFORT)
 
 
 def _choose_templates(outfit_count: int, brief: dict[str, Any]) -> list[str]:
@@ -171,6 +183,87 @@ def _choose_templates(outfit_count: int, brief: dict[str, Any]) -> list[str]:
     return out[:outfit_count]
 
 
+# ── style facets (per-concept diversity engine) ─────────────────────────────────
+
+_FACETS_PROMPT = """\
+List {count} DISTINCT, specific style directions a complete outfit for this concept
+could take. Each must be a different facet / mood / subculture of the concept —
+different enough that outfits built from two of them look like different worlds.
+Be concrete and evocative (e.g. "tropical resort luxe", "Y2K mall streetwear",
+"rockstar leather", "heritage academia prep"). A tight concept yields few real
+directions; a broad one (a versatile artist, a city, a decade) yields many.
+
+Concept: {brief}
+
+Return JSON: {{"facets": ["direction one", "direction two", ...]}}\
+"""
+
+
+def generate_facets(brief: dict[str, Any], count: int = 8, *, service: ClaudeJSONService | None = None) -> list[str]:
+    service = service or make_curator_service()
+    prompt = LLMPrompt(
+        title="Concept style facets",
+        body=_FACETS_PROMPT.format(count=count, brief=json.dumps(brief, indent=2)),
+        system=_CURATOR_SYSTEM,
+    )
+    data = service.request_json(prompt)
+    facets = data.get("facets", [])
+    return [f.strip() for f in facets if isinstance(f, str) and f.strip()][:count]
+
+
+def get_or_create_facets(
+    conn: Any,
+    concept_id: str,
+    brief: dict[str, Any],
+    *,
+    service: ClaudeJSONService | None = None,
+    count: int = 8,
+) -> list[str]:
+    """Concept's style directions, generated once and cached in concept metadata."""
+    from app.db.concepts import get_concept, update_concept_metadata
+
+    try:
+        concept = get_concept(conn, concept_id)
+    except Exception:
+        return []
+    cached = concept.metadata.get("style_facets")
+    if isinstance(cached, list) and len([f for f in cached if isinstance(f, str)]) >= 3:
+        return cached
+    facets = generate_facets(brief, count, service=service)
+    if facets:
+        md = {**concept.metadata, "style_facets": facets}
+        update_concept_metadata(conn, concept_id, md)
+    return facets
+
+
+def _assign_genders(outfit_count: int, brief: dict[str, Any]) -> list[str]:
+    """Deterministic ~70% feminine / 30% masculine per batch, seeded for repeatability."""
+    import random
+    feminine = round(outfit_count * 0.7)
+    genders = ["feminine"] * feminine + ["masculine"] * (outfit_count - feminine)
+    random.Random("gender:" + json.dumps(brief, sort_keys=True)).shuffle(genders)
+    return genders
+
+
+def _sample_facets(
+    facets: list[str], outfit_count: int, history: list[dict[str, Any]], brief: dict[str, Any]
+) -> list[str | None]:
+    """Pick distinct facets for this batch, preferring ones not used recently.
+    Seeded by history length so each run of a concept explores fresh directions."""
+    import random
+    if not facets:
+        return [None] * outfit_count
+    used = [h.get("facet") for h in (history or []) if isinstance(h, dict) and h.get("facet")]
+    recent = set(used[-(outfit_count * 2):])
+    pool = [f for f in facets if f not in recent] or list(facets)
+    rng = random.Random(f"facet:{json.dumps(brief, sort_keys=True)}:{len(history or [])}")
+    rng.shuffle(pool)
+    out: list[str | None] = pool[:outfit_count]
+    while len(out) < outfit_count:
+        out.append(rng.choice(facets))
+    return out
+
+
 def generate_outfit_specs(
     brief: dict[str, Any],
     outfit_count: int,
@@ -178,18 +271,28 @@ def generate_outfit_specs(
     *,
     service: ClaudeJSONService | None = None,
     cached_products: list[dict[str, Any]] | None = None,
+    facets: list[str] | None = None,
 ) -> list[dict[str, Any]]:
-    """Generate outfit specs with the curator, each forced into a collage template."""
+    """Generate outfit specs: each forced into a template, anchored to a distinct
+    style facet, assigned a gender presentation, and de-duped against history."""
     from app.collage.html_export import template_requirement_labels
 
     service = service or make_curator_service()
     plural = "s" if outfit_count != 1 else ""
 
     chosen_templates = _choose_templates(outfit_count, brief)
+    sampled_facets = _sample_facets(facets or [], outfit_count, history, brief)
+    genders = _assign_genders(outfit_count, brief)
+
     composition_lines = []
-    for idx, tname in enumerate(chosen_templates, start=1):
+    for idx, (tname, facet, gender) in enumerate(
+        zip(chosen_templates, sampled_facets, genders), start=1
+    ):
         items = ", ".join(template_requirement_labels(tname))
-        composition_lines.append(f"Outfit {idx}: {items}")
+        direction = facet or "the concept's core aesthetic"
+        composition_lines.append(
+            f"Outfit {idx} — direction: {direction} | presentation: {gender} | items: {items}"
+        )
     composition = "\n".join(composition_lines)
 
     if cached_products:
@@ -220,11 +323,13 @@ def generate_outfit_specs(
     outfits = data.get("outfits", [])
     if not isinstance(outfits, list) or not outfits:
         raise ValueError(f"Curator returned no outfits: {data}")
-    # Tag each spec with the template it was generated for, so the collage
-    # renders with the same layout the items were sourced for.
-    for spec, tname in zip(outfits, chosen_templates):
+    # Tag each spec with its template (so the collage renders the matching layout),
+    # its facet (so history avoids repeating directions), and gender presentation.
+    for spec, tname, facet, gender in zip(outfits, chosen_templates, sampled_facets, genders):
         if isinstance(spec, dict):
             spec["template"] = tname
+            spec["facet"] = facet
+            spec["gender"] = gender
     log.info("Curator generated %d outfit spec(s)", len(outfits))
     return outfits
 
@@ -346,4 +451,6 @@ def outfit_spec_to_pipeline_format(outfit_spec: dict[str, Any]) -> dict[str, Any
         "search_queries": outfit_spec_to_search_queries(outfit_spec),
         "diversity_notes": [],
         "template": outfit_spec.get("template"),
+        "facet": outfit_spec.get("facet"),
+        "gender": outfit_spec.get("gender"),
     }

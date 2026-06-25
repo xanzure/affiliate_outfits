@@ -15,7 +15,7 @@ from app.agents.collage.style_agent import BatchVisualStyle, generate_batch_visu
 from app.agents.outfit.parser import normalize_outfit_agent_output, normalize_outfit_agent_outputs
 from app.agents.engagement.agent import generate_engagement_with_llm
 from app.agents.outfit.agent import generate_outfit_batch_with_llm, generate_outfit_with_llm, curate_outfit_products_with_feedback
-from app.agents.outfit.curator import outfit_spec_to_pipeline_format
+from app.agents.outfit.curator import get_or_create_facets, outfit_spec_to_pipeline_format
 from app.config import Settings, load_settings
 from app.db.collages import create_collage
 from app.db.concepts import get_concept, update_concept_metadata
@@ -81,8 +81,9 @@ def run_daily_for_brief(
     _step("Generating outfit spec (curator)...", 2, 5)
     outfit_output = outfit_output or generate_outfit_with_llm(
         scheduled_brief.brief,
-        history=[],
+        history=_concept_history(conn, scheduled_brief.concept_id),
         cached_products=cached_products,
+        facets=get_or_create_facets(conn, scheduled_brief.concept_id, scheduled_brief.brief),
     )
     outfit_output = normalize_outfit_agent_output(outfit_output)
     title = outfit_output.get("outfit", {}).get("title", "untitled")
@@ -203,8 +204,9 @@ def run_daily_outfit_set_for_concept(
         if outfit_batch_output is not None
         else generate_outfit_batch_with_llm(
             scheduled_concept.brief,
-            history=[],
+            history=_concept_history(conn, scheduled_concept.concept_id),
             outfit_count=outfit_count,
+            facets=get_or_create_facets(conn, scheduled_concept.concept_id, scheduled_concept.brief),
         )
     )
 
@@ -416,6 +418,27 @@ def _set_concept_cover_image_if_missing(
         return
     metadata["cover_image_url"] = cover_image_url
     update_concept_metadata(conn, concept_id, metadata)
+
+
+def _concept_history(conn: sqlite3.Connection, concept_id: str | None) -> list[dict[str, Any]]:
+    """Prior outfits for this concept, derived live from the outfits table — so a
+    deleted outfit is instantly gone from the curator's anti-repeat history."""
+    if not concept_id:
+        return []
+    from app.db.outfits import list_outfits_for_concept
+    history: list[dict[str, Any]] = []
+    try:
+        for o in list_outfits_for_concept(conn, concept_id):
+            spec = o.spec or {}
+            outfit = spec.get("outfit", {}) if isinstance(spec.get("outfit"), dict) else {}
+            history.append({
+                "title": outfit.get("title", ""),
+                "facet": spec.get("facet"),
+                "items": outfit.get("categories", []),
+            })
+    except Exception:
+        return []
+    return history
 
 
 def _product_payload(product: Product) -> dict[str, Any]:
