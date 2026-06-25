@@ -163,4 +163,52 @@ def curate_outfit_products_with_feedback(
                 refined.append(query)
         current_queries = refined
 
+    best_products = _ensure_core_garments(
+        conn, best_products, outfit_spec, tracking_id=tracking_id, settings=settings,
+    )
     return best_products
+
+
+def _ensure_core_garments(
+    conn: sqlite3.Connection,
+    products: list[Product],
+    outfit_spec: dict[str, Any],
+    *,
+    tracking_id: str,
+    settings: Any,
+) -> list[Product]:
+    """Guarantee a wearable outfit: a dress, or BOTH a top and a bottom.
+
+    A too-specific query (band merch tee, niche retailer) can source nothing and
+    silently drop the piece, leaving e.g. a topless outfit. If a core garment is
+    missing, re-search it with the relaxed category text so something lands.
+    """
+    from app.pipelines.product_pipeline import ProductSearchSpec, resolve_products_from_searches
+
+    zones = {_resolve_zone(p.category) for p in products}
+    if "dress" in zones:
+        return products
+
+    outfit = outfit_spec.get("outfit", {}) if isinstance(outfit_spec.get("outfit"), dict) else {}
+    categories = outfit.get("categories", []) or []
+    colors = outfit.get("colors", []) or []
+
+    needed: list[ProductSearchSpec] = []
+    for zone, default_label in (("top", "neutral top"), ("bottom", "tailored trousers")):
+        if zone in zones:
+            continue
+        label, color = default_label, None
+        for i, c in enumerate(categories):  # reuse the originally-intended piece
+            if _resolve_zone(c) == zone:
+                label = c
+                color = colors[i] if i < len(colors) else None
+                break
+        query = " ".join(x for x in (color, label) if x)
+        log.info("Core garment missing (%s) — fallback search: %s", zone, query)
+        needed.append(ProductSearchSpec(query=query, category=label, color=color, limit=3))
+
+    if needed:
+        products = products + resolve_products_from_searches(
+            conn, needed, tracking_id=tracking_id, settings=settings,
+        )
+    return products

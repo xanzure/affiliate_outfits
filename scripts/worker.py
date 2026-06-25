@@ -157,11 +157,71 @@ def _handle_regenerate_image(conn, payload: dict) -> dict:
     return {"reprocessed": len(products)}
 
 
+def _handle_intake_product(conn, payload: dict) -> dict:
+    """Manual wardrobe intake: scrape ONE product URL (Apify detailsUrls), or use
+    a manually-uploaded image, then process + store. Specific error on scrape fail."""
+    from dataclasses import replace
+    from app.config import load_settings
+    from app.pipelines.image_pipeline import prepare_product_images
+    from app.pipelines.product_pipeline import _store_product_candidates
+    from app.services.affiliate_service import affiliate_resolver_from_name
+    from app.services.image_service import ImageService
+    from app.services.product_search_service import (
+        ProductSearchResult, scrape_product_url, _retailer_from_url,
+    )
+
+    settings = load_settings()
+    url = (payload.get("url") or "").strip()
+    if not url.startswith(("http://", "https://")):
+        return {"error": "a valid product URL is required"}
+    manual_image = payload.get("image_url")
+    category = payload.get("category")
+
+    if manual_image:
+        result = ProductSearchResult(
+            retailer=_retailer_from_url(url), name=payload.get("name") or "Wardrobe item",
+            url=url, category=category, image_url=manual_image, source="manual",
+        )
+    else:
+        result = scrape_product_url(url, api_token=settings.apify_token or "", category=category)
+        if result is None or not result.image_url:
+            return {"error": "image could not be scraped from that URL — upload an image manually to add it"}
+
+    resolver = affiliate_resolver_from_name(settings.affiliate_provider)
+    products = _store_product_candidates(
+        conn, [result], tracking_id="wardrobe-intake", affiliate_resolver=resolver,
+        color=payload.get("color"), material=payload.get("material"),
+    )
+    if not products:
+        return {"error": "failed to store product"}
+    prepared = prepare_product_images(conn, products, image_service=ImageService(settings))
+    if not prepared and not manual_image:
+        return {"error": "image processing failed — upload an image manually to retry"}
+    return {"product_id": products[0].id, "name": products[0].name, "image_ready": len(prepared)}
+
+
+def _handle_reprocess_product(conn, payload: dict) -> dict:
+    """Re-run the cutout for one product, optionally with a freshly-uploaded image."""
+    from app.config import load_settings
+    from app.db.products import get_product, update_product_image_url
+    from app.pipelines.image_pipeline import prepare_product_images
+    from app.services.image_service import ImageService
+
+    pid = payload["product_id"]
+    if payload.get("image_url"):  # re-upload forces a real reprocess
+        update_product_image_url(conn, pid, payload["image_url"])
+    product = get_product(conn, pid)
+    prepared = prepare_product_images(conn, [product], image_service=ImageService(load_settings()))
+    return {"reprocessed": len(prepared)}
+
+
 HANDLERS = {
     "link_check": _handle_link_check,
     "run_concept": _handle_run_concept,
     "regenerate_collage": _handle_regenerate_collage,
     "regenerate_image": _handle_regenerate_image,
+    "intake_product": _handle_intake_product,
+    "reprocess_product": _handle_reprocess_product,
 }
 
 

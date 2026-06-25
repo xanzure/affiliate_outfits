@@ -515,6 +515,41 @@ class ApifyEcommerceProvider:
         return rank_product_results(results, category=category)[:limit]
 
 
+def scrape_product_url(
+    url: str,
+    *,
+    api_token: str,
+    category: str | None = None,
+    timeout_seconds: int = 300,
+) -> ProductSearchResult | None:
+    """Scrape ONE exact product URL via Apify detailsUrls mode (no search).
+
+    For manual wardrobe intake: the user pastes a real product page, we scrape
+    that page's image + data. Returns None if no usable image came back.
+    """
+    if not api_token:
+        raise ValueError("APIFY_TOKEN is required to scrape product URLs")
+    payload = json.dumps({
+        "detailsUrls": [{"url": url}],
+        "scrapeMode": "AUTO",
+    }).encode("utf-8")
+    run_url = ApifyEcommerceProvider.RUN_URL.format(
+        actor=ApifyEcommerceProvider.ACTOR_ID, token=api_token,
+    )
+    request = Request(
+        run_url, data=payload, method="POST",
+        headers={"Content-Type": "application/json", "User-Agent": "affiliate-outfits/0.1"},
+    )
+    with urlopen(request, timeout=timeout_seconds) as response:
+        items = json.loads(response.read().decode("utf-8"))
+    for item in items:
+        if isinstance(item, dict):
+            result = _result_from_apify_item(item, category=category)
+            if result is not None:
+                return result
+    return None
+
+
 def _result_from_apify_item(item: dict[str, Any], *, category: str | None) -> ProductSearchResult | None:
     url = _clean_text(item.get("url"))
     image = _clean_text(item.get("image"))

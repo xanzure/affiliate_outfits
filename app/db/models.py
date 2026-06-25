@@ -43,6 +43,7 @@ class Product:
     created_at: str
     updated_at: str
     metadata: JsonDict = field(default_factory=dict)
+    archived_at: str | None = None  # set = removed from cache, kept so outfits don't break
 
 
 @dataclass(frozen=True)

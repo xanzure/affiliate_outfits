@@ -6,6 +6,15 @@ from app.db._helpers import dumps_json, loads_json, new_id, require_row, utc_now
 from app.db.models import JsonDict, Product
 
 
+def _row_get(row: object, key: str, default: object = None) -> object:
+    """Read a column from a Row/dict that may predate a migration."""
+    try:
+        value = row[key]  # type: ignore[index]
+    except (KeyError, IndexError):
+        return default
+    return default if value is None else value
+
+
 def _to_product(row: sqlite3.Row) -> Product:
     return Product(
         id=row["id"],
@@ -21,6 +30,7 @@ def _to_product(row: sqlite3.Row) -> Product:
         created_at=row["created_at"],
         updated_at=row["updated_at"],
         metadata=loads_json(row["metadata_json"], {}),
+        archived_at=_row_get(row, "archived_at"),
     )
 
 
@@ -92,15 +102,41 @@ def get_product_by_retailer_url(conn: sqlite3.Connection, retailer: str, url: st
     return _to_product(require_row(row, "product", f"{retailer}:{url}"))
 
 
-def list_products(conn: sqlite3.Connection, *, category: str | None = None) -> list[Product]:
+def list_products(
+    conn: sqlite3.Connection,
+    *,
+    category: str | None = None,
+    include_archived: bool = False,
+) -> list[Product]:
+    """List products. Archived (soft-deleted) products are excluded by default so
+    the cache and curator never reuse them; the Wardrobe view can opt them in."""
+    clauses, params = [], []
     if category:
-        rows = conn.execute(
-            "SELECT * FROM products WHERE category = ? ORDER BY retailer, name",
-            (category,),
-        ).fetchall()
-    else:
-        rows = conn.execute("SELECT * FROM products ORDER BY retailer, name").fetchall()
+        clauses.append("category = ?")
+        params.append(category)
+    if not include_archived:
+        clauses.append("archived_at IS NULL")
+    where = f"WHERE {' AND '.join(clauses)}" if clauses else ""
+    rows = conn.execute(
+        f"SELECT * FROM products {where} ORDER BY retailer, name", tuple(params)
+    ).fetchall()
     return [_to_product(row) for row in rows]
+
+
+def archive_product(conn: sqlite3.Connection, product_id: str) -> None:
+    """Soft-delete: remove from the cache so no new outfit uses it, but keep the
+    row + image so existing outfits that reference it don't break."""
+    conn.execute(
+        "UPDATE products SET archived_at = ?, updated_at = ? WHERE id = ?",
+        (utc_now(), utc_now(), product_id),
+    )
+
+
+def unarchive_product(conn: sqlite3.Connection, product_id: str) -> None:
+    conn.execute(
+        "UPDATE products SET archived_at = NULL, updated_at = ? WHERE id = ?",
+        (utc_now(), product_id),
+    )
 
 
 def update_product_local_image_path(

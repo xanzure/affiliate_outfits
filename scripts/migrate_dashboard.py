@@ -18,6 +18,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from app.db.pg_connection import connect_postgres
 
 STATEMENTS = [
+    # products: soft-delete (archived = out of cache, kept so outfits don't break)
+    "ALTER TABLE products ADD COLUMN IF NOT EXISTS archived_at TEXT",
+    "CREATE INDEX IF NOT EXISTS idx_products_archived_at ON products(archived_at)",
     # posts: scheduling + approval + link-health columns
     "ALTER TABLE posts ADD COLUMN IF NOT EXISTS scheduled_for TEXT",
     "ALTER TABLE posts ADD COLUMN IF NOT EXISTS queue_order TEXT",

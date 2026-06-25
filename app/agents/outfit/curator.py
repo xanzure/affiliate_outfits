@@ -63,6 +63,17 @@ Generate {outfit_count} distinct, opinionated outfit{plural}. Each must:
 - Differ meaningfully from each other in silhouette, color story, or mood
 - Prefer cached inventory items when they genuinely fit — note them with use_cached_url field
 
+## CRITICAL: describe items as they are SOLD, never how they are STYLED
+`category` and `search_query` must describe a product a retailer actually lists.
+NEVER include styling or wearing instructions — those are how the outfit is worn,
+not searchable attributes, and they return zero results.
+- BANNED in category/search_query: "knotted at waist", "tucked in", "rolled cuffs",
+  "sleeves pushed up", "draped", "belted", "layered over", "half-tucked", "cuffed",
+  "french tuck", "open over", "thrown on", or any verb describing how to wear it.
+- Search for the GARMENT: "graphic band tee", not "graphic tee knotted at waist".
+  "high-rise straight jeans", not "jeans cuffed at the ankle".
+Put the styling intent in `role` or `rationale` if you must — never in what we search for.
+
 Return JSON:
 {{
   "outfits": [
@@ -73,10 +84,10 @@ Return JSON:
       "items": [
         {{
           "role": "what role this piece plays (e.g. statement top, foundation trouser)",
-          "category": "exact product type (e.g. wide-leg trousers, leather mule, oversized blazer)",
+          "category": "exact product type AS SOLD (e.g. wide-leg trousers, leather mule, oversized blazer) — no styling words",
           "color": "specific color (e.g. ecru, burnt sienna, slate — never 'neutral' or 'casual')",
           "material": "specific material (e.g. linen, washed denim, suede, ribbed knit)",
-          "search_query": "targeted search query naming retailer + product + color + material. Example: 'COS wide-leg linen trousers ecru'",
+          "search_query": "retailer + product + color + material, AS SOLD. Example: 'COS wide-leg linen trousers ecru'. No styling/wearing words.",
           "use_cached_url": "URL from cached inventory if reusing an existing item, otherwise null",
           "price_range": "budget | mid | elevated | luxury"
         }}

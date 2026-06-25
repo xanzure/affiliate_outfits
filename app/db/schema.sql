@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS products (
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
     metadata_json TEXT NOT NULL DEFAULT '{}',
+    archived_at TEXT,
     UNIQUE (retailer, url)
 );
 

@@ -15,7 +15,7 @@ export default async function DashboardLayout({
   const concepts = await getConceptOptions()
 
   return (
-    <div className="flex min-h-screen">
+    <div className="flex h-screen overflow-hidden">
       <AdminNav
         actions={
           <>
@@ -28,7 +28,7 @@ export default async function DashboardLayout({
           </>
         }
       />
-      <main className="flex-1 px-5 pb-24 pt-16 sm:px-8 md:pb-10 md:pt-10">
+      <main className="flex-1 overflow-y-auto px-5 pb-24 pt-16 sm:px-8 md:pb-10 md:pt-10">
         <div className="mx-auto max-w-[1100px]">{children}</div>
       </main>
     </div>
