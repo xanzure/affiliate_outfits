@@ -13,8 +13,10 @@ from app.agents.outfit.curator import (
     review_found_products,
 )
 from app.agents.outfit.parser import normalize_outfit_agent_output, normalize_outfit_agent_outputs
+from app.collage.export import _resolve_zone
 from app.db.models import Product
 from app.services.llm_service import ClaudeJSONService
+from app.services.product_cache import find_cached_match
 
 log = logging.getLogger(__name__)
 
@@ -82,18 +84,33 @@ def curate_outfit_products_with_feedback(
         search_specs = []
 
         for q in current_queries:
+            # 1) explicit LLM reuse (exact URL it picked from cached inventory)
             cached_url = q.get("use_cached_url")
             if cached_url:
                 cached = resolve_cached_product(conn, cached_url)
                 if cached:
-                    log.info("  Using cached product: %s", cached.name[:60])
+                    log.info("  Using cached product (LLM): %s", cached.name[:60])
                     products.append(cached)
                     continue
+            # 2) deterministic near-match gate — reuse a close cached product
+            #    (same zone + colour family + garment type) before paying to search
+            near = find_cached_match(
+                conn,
+                zone=_resolve_zone(q.get("category")),
+                color=q.get("color"),
+                descriptor=f"{q.get('category') or ''} {q.get('query') or ''}",
+            )
+            if near is not None:
+                log.info("  Reusing near-match cached product: %s", near.name[:60])
+                products.append(near)
+                continue
             search_specs.append(
                 ProductSearchSpec(
                     query=q["query"],
                     category=q.get("category"),
                     limit=q.get("limit", 5),
+                    color=q.get("color"),
+                    material=q.get("material"),
                 )
             )
 

@@ -50,6 +50,7 @@ class Settings:
     product_search_provider: str = "fixtures"
     serpapi_api_key: str | None = None
     tavily_api_key: str | None = None
+    apify_token: str | None = None
     runflow_api_key: str | None = None
     google_shopping_location: str = "United States"
     google_shopping_gl: str = "us"
@@ -104,6 +105,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         product_search_provider=read("PRODUCT_SEARCH_PROVIDER", "fixtures").lower(),
         serpapi_api_key=read("SERPAPI_API_KEY", "") or None,
         tavily_api_key=read("TAVILY_API_KEY", "") or None,
+        apify_token=read("APIFY_TOKEN", "") or None,
         runflow_api_key=read("RUNFLOW_API_KEY", "") or None,
         google_shopping_location=read("GOOGLE_SHOPPING_LOCATION", "United States"),
         google_shopping_gl=read("GOOGLE_SHOPPING_GL", "us"),

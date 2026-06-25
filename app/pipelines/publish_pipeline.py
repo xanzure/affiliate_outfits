@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import UTC, date, datetime, time, timedelta
+from datetime import date, datetime, time, timedelta, timezone
+
+UTC = timezone.utc  # datetime.UTC only exists on Python 3.11+; this is portable
 from pathlib import Path
 from typing import Any
 

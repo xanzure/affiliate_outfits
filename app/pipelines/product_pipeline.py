@@ -25,6 +25,8 @@ class ProductSearchSpec:
     query: str
     category: str | None = None
     limit: int = 5
+    color: str | None = None      # intended colour, persisted for cache matching
+    material: str | None = None
 
 
 def resolve_products_from_searches(
@@ -70,6 +72,8 @@ def resolve_products_from_searches(
             ranked,
             tracking_id=tracking_id,
             affiliate_resolver=affiliate_resolver,
+            color=searches[i].color,
+            material=searches[i].material,
         )
         selected = next((p for p in stored if p.url not in seen_urls), None)
         if selected is None:
@@ -86,6 +90,8 @@ def _store_product_candidates(
     *,
     tracking_id: str,
     affiliate_resolver: AffiliateResolver,
+    color: str | None = None,
+    material: str | None = None,
 ) -> list[Product]:
     products: list[Product] = []
     for index, candidate in enumerate(candidates, start=1):
@@ -110,6 +116,9 @@ def _store_product_candidates(
                     "product_source": candidate.source,
                     "candidate_rank": index,
                     "affiliate_network": affiliate.network,
+                    # intended attributes — let the near-match cache reuse this later
+                    "color": color,
+                    "material": material,
                 },
             )
         )

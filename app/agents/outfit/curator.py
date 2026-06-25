@@ -280,27 +280,39 @@ def review_found_products(
 
 
 def outfit_spec_to_search_queries(outfit_spec: dict[str, Any]) -> list[dict[str, Any]]:
-    """Convert a curator or normalized pipeline spec to search_queries list."""
+    """Convert a curator or normalized pipeline spec to search_queries list.
+
+    Carries colour/material so the near-match cache can reuse close products.
+    """
     if outfit_spec.get("items"):
         return [
             {
                 "query": item.get("search_query", ""),
                 "category": item.get("category"),
+                "color": item.get("color"),
+                "material": item.get("material"),
                 "limit": 5,
                 "use_cached_url": item.get("use_cached_url") or None,
             }
             for item in outfit_spec["items"]
         ]
-    return [
-        {
+    # pipeline format: colours/materials live in parallel arrays under "outfit"
+    outfit = outfit_spec.get("outfit", {}) if isinstance(outfit_spec.get("outfit"), dict) else {}
+    colors = outfit.get("colors", []) or []
+    materials = outfit.get("materials", []) or []
+    out = []
+    for i, q in enumerate(outfit_spec.get("search_queries", [])):
+        if not isinstance(q, dict):
+            continue
+        out.append({
             "query": q.get("query", ""),
             "category": q.get("category"),
+            "color": q.get("color") or (colors[i] if i < len(colors) else None),
+            "material": q.get("material") or (materials[i] if i < len(materials) else None),
             "limit": q.get("limit", 5),
             "use_cached_url": q.get("use_cached_url") or None,
-        }
-        for q in outfit_spec.get("search_queries", [])
-        if isinstance(q, dict)
-    ]
+        })
+    return out
 
 
 def outfit_spec_to_pipeline_format(outfit_spec: dict[str, Any]) -> dict[str, Any]:

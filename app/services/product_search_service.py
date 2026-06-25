@@ -33,6 +33,33 @@ BLOCKED_RETAILER_TERMS = {
     "therealreal",
 }
 CONDITIONAL_RETAILER_TERMS: set[str] = set()  # shein and amazon now allowed
+
+# Raw materials / craft / furniture / home goods — search matches material words
+# ("leather", "silk", "suede") to these, and we'd pay to cut out images of cloth
+# and couches. Reject by product-name signal or retailer.
+NONAPPAREL_NAME_TERMS = {
+    "fabric", "cowhide", "microsuede", "upholstery", "yardage", "by the yard",
+    "leather by", "make market", "tooling", "crust leather", "swatch", "bolt of",
+    "sofa", "couch", "sectional", "recliner", "ottoman", "armchair", "chair",
+    "stool", "pillow", "pillowcase", "duvet", "comforter", "curtain", "area rug",
+    "mattress", "bedding", "tablecloth", "wallpaper",
+    "yarn", "skein", "roving", "knitting kit",  # NOT "crochet"/"embroidered" — those are real garments
+}
+NONAPPAREL_RETAILER_TERMS = {
+    "michaels", "hobbylobby", "hobby lobby", "joann", "fabricwholesale",
+    "leatherunlt", "handweavers", "hancocks", "nochka", "elwshop", "lumens",
+    "overstock", "ostkcdn", "ashleyfurniture", "wayfair", "desertcart",
+}
+
+
+def is_apparel_result(name: str | None, retailer: str | None, url: str) -> bool:
+    text = (name or "").lower()
+    if any(term in text for term in NONAPPAREL_NAME_TERMS):
+        return False
+    haystack = f"{retailer or ''} {urlparse(url).netloc}".lower()
+    if any(term in haystack for term in NONAPPAREL_RETAILER_TERMS):
+        return False
+    return True
 LOW_STAKES_CATEGORY_TERMS = {
     "accessory",
     "accessories",
@@ -431,8 +458,103 @@ class AWINProductSearchProvider:
         return rank_product_results(results, category=category)[:limit]
 
 
+class ApifyEcommerceProvider:
+    """Apify 'E-commerce Scraping Tool' in search-engine Products mode.
+
+    Discovers products via search engine, then deep-scrapes each real merchant
+    product page — returning clean retailer-CDN images and true product URLs
+    (unlike Google Shopping, which only gives thumbnails + redirect links).
+    """
+
+    ACTOR_ID = "2APbAvDfNDOWXbkWf"
+    RUN_URL = "https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?token={token}"
+
+    def __init__(self, *, api_token: str, country_code: str = "us", timeout_seconds: int = 300) -> None:
+        if not api_token:
+            raise ValueError("APIFY_TOKEN is required when PRODUCT_SEARCH_PROVIDER=apify")
+        self.api_token = api_token
+        self.country_code = country_code
+        self.timeout_seconds = timeout_seconds
+
+    def search(
+        self,
+        query: str,
+        *,
+        category: str | None = None,
+        limit: int = 5,
+    ) -> list[ProductSearchResult]:
+        if limit < 1:
+            raise ValueError("limit must be at least 1")
+
+        # Apify charges per product SCRAPED, before our retailer filter runs, and
+        # there's no source-level retailer blacklist (marketplaces enum is mass
+        # retailers only; Google -site: operators don't pass through). So keep the
+        # over-fetch small — retailer-named queries surface the real store near the
+        # top, so a modest candidate count yields clean results without paying to
+        # scrape a pile of eBay/Poshmark listings we'd only throw away.
+        # ponytail: tune this number if yield is too thin — it's the cost dial.
+        max_candidates = min(max(limit + 2, 6), 8)
+        payload = json.dumps({
+            "searchEngineKeyword": query,
+            "countryCode": self.country_code,
+            "scrapeModeSearchEngine": "Products",
+            "maxSearchEngineProducts": max_candidates,
+        }).encode("utf-8")
+        url = self.RUN_URL.format(actor=self.ACTOR_ID, token=self.api_token)
+        request = Request(
+            url, data=payload, method="POST",
+            headers={"Content-Type": "application/json", "User-Agent": "affiliate-outfits/0.1"},
+        )
+        with urlopen(request, timeout=self.timeout_seconds) as response:
+            items = json.loads(response.read().decode("utf-8"))
+
+        results = [
+            r for r in (_result_from_apify_item(item, category=category) for item in items if isinstance(item, dict))
+            if r is not None
+        ]
+        return rank_product_results(results, category=category)[:limit]
+
+
+def _result_from_apify_item(item: dict[str, Any], *, category: str | None) -> ProductSearchResult | None:
+    url = _clean_text(item.get("url"))
+    image = _clean_text(item.get("image"))
+    name = _clean_text(item.get("name"))
+    if not url or not image or not name:
+        return None  # need a real product page + image to be useful
+
+    offers = item.get("offers") if isinstance(item.get("offers"), dict) else {}
+    brand = item.get("brand") if isinstance(item.get("brand"), dict) else {}
+
+    return ProductSearchResult(
+        retailer=_retailer_from_url(url),
+        name=name,
+        url=url,
+        category=category,
+        image_url=image,
+        price_cents=_price_to_cents(offers.get("price")),
+        currency=_normalize_currency(offers.get("priceCurrency")),
+        source="apify",
+        metadata={"brand": _clean_text(brand.get("slogan")), "description": _clean_text(item.get("description"))},
+    )
+
+
+def _normalize_currency(value: Any) -> str:
+    if isinstance(value, str):
+        v = value.strip()
+        if v in {"$", "US$", "USD"}:
+            return "USD"
+        if v:
+            return v
+    return "USD"
+
+
 def product_search_provider_from_settings(settings: Settings | None = None) -> ProductSearchProvider:
     settings = settings or load_settings()
+    if settings.product_search_provider == "apify":
+        return ApifyEcommerceProvider(
+            api_token=settings.apify_token or "",
+            country_code=settings.google_shopping_gl or "us",
+        )
     if settings.product_search_provider == "awin":
         catalog_path = settings.data_dir / "awin_catalog.sqlite3"
         return AWINProductSearchProvider(catalog_path)
@@ -459,6 +581,7 @@ def rank_product_results(
         result
         for result in results
         if is_allowed_retailer(result.retailer, result.url, category=category or result.category)
+        and is_apparel_result(result.name, result.retailer, result.url)
     ]
     return sorted(
         allowed,
