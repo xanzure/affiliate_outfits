@@ -86,6 +86,20 @@ not searchable attributes, and they return zero results.
   "high-rise straight jeans", not "jeans cuffed at the ankle".
 Put the styling intent in `role` or `rationale` if you must — never in what we search for.
 
+## CRITICAL: merch must be OFFICIAL
+If an item is artist / band / event / team merch (a graphic tee, hoodie, or hat
+carrying an artist's name, album, tour, or logo), it MUST come from an OFFICIAL
+source:
+- the artist's official store / webstore, or the official tour or event merch, or
+- an official brand partnership / collaboration (e.g. "Adidas x Bad Bunny",
+  "Bravado", "Live Nation merch", a label's official store).
+NEVER source bootleg or print-on-demand knockoffs. BANNED merch sources in
+search_query: TeePublic, Redbubble, Etsy, Society6, Spreadshirt, Zazzle,
+CafePress, Merch by Amazon, or any generic "custom"/"fan-made" print shop.
+Name the official source in the search_query (e.g. "Bad Bunny official store
+Debí Tirar Más Fotos tour tee"). If no official merch plausibly exists, choose a
+non-merch garment that fits the direction instead.
+
 Return JSON:
 {{
   "outfits": [

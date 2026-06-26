@@ -31,6 +31,17 @@ BLOCKED_RETAILER_TERMS = {
     "vestiaire",
     "tradesy",
     "therealreal",
+    # Bootleg / print-on-demand merch — never official artist/brand merch
+    "teepublic",
+    "redbubble",
+    "society6",
+    "spreadshirt",
+    "zazzle",
+    "cafepress",
+    "teespring",
+    "spring.com",
+    "bonfire",
+    "threadless",
 }
 CONDITIONAL_RETAILER_TERMS: set[str] = set()  # shein and amazon now allowed
 
