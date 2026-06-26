@@ -1,59 +1,20 @@
 "use client"
 
 import Link from "next/link"
-import { useState, useTransition, useEffect, useRef } from "react"
-import { enqueueJob, getJobStatus } from "@/app/admin/(dashboard)/job-actions"
-
-type JobState = { id: string; label: string; status: string }
-
-const STATUS_COLOR: Record<string, string> = {
-  queued: "text-muted",
-  running: "text-amber-500",
-  done: "text-green-600",
-  failed: "text-red-500",
-}
-const STATUS_LABEL: Record<string, string> = {
-  queued: "queued",
-  running: "running…",
-  done: "done ✓",
-  failed: "failed ✗",
-  unknown: "?",
-}
-
-function useJobPoller(job: JobState | null, onDone: (status: string) => void) {
-  const ref = useRef<ReturnType<typeof setInterval> | null>(null)
-  useEffect(() => {
-    if (!job || job.status === "done" || job.status === "failed") return
-    ref.current = setInterval(async () => {
-      const { status } = await getJobStatus(job.id)
-      onDone(status)
-      if (status === "done" || status === "failed") {
-        if (ref.current) clearInterval(ref.current)
-      }
-    }, 2500)
-    return () => { if (ref.current) clearInterval(ref.current) }
-  }, [job?.id])
-}
+import { useState, useTransition } from "react"
+import { enqueueJob } from "@/app/admin/(dashboard)/job-actions"
+import { useTasks } from "./TasksProvider"
 
 export default function GlobalActions({
   concepts,
 }: {
   concepts: { id: string; name: string }[]
 }) {
+  const { trackJob } = useTasks()
   const [runOpen, setRunOpen] = useState(false)
   const [conceptId, setConceptId] = useState("")
   const [batch, setBatch] = useState(false)
   const [pending, start] = useTransition()
-
-  const [pipelineJob, setPipelineJob] = useState<JobState | null>(null)
-  const [linkJob, setLinkJob] = useState<JobState | null>(null)
-
-  useJobPoller(pipelineJob, (status) =>
-    setPipelineJob((j) => j ? { ...j, status } : j)
-  )
-  useJobPoller(linkJob, (status) =>
-    setLinkJob((j) => j ? { ...j, status } : j)
-  )
 
   const btn =
     "w-full rounded-sm px-3 py-2 text-left text-[0.7rem] tracking-[0.2em] uppercase text-muted transition-colors hover:text-accent"
@@ -63,12 +24,6 @@ export default function GlobalActions({
       <button className={btn} onClick={() => setRunOpen((v) => !v)}>
         ▶ Run pipeline
       </button>
-
-      {pipelineJob && (
-        <p className={`px-3 text-[0.65rem] ${STATUS_COLOR[pipelineJob.status] ?? "text-muted"}`}>
-          {pipelineJob.label}: {STATUS_LABEL[pipelineJob.status] ?? pipelineJob.status}
-        </p>
-      )}
 
       {runOpen && (
         <div className="rounded-sm border border-line bg-surface p-3">
@@ -93,8 +48,8 @@ export default function GlobalActions({
             onClick={() =>
               start(async () => {
                 const id = await enqueueJob("run_concept", { concept_id: conceptId, batch })
-                const label = concepts.find((c) => c.id === conceptId)?.name ?? "concept"
-                setPipelineJob({ id, label, status: "queued" })
+                const name = concepts.find((c) => c.id === conceptId)?.name ?? "concept"
+                trackJob(id, batch ? "Pipeline ×5" : "Pipeline", name)
                 setRunOpen(false)
               })
             }
@@ -111,18 +66,12 @@ export default function GlobalActions({
         onClick={() =>
           start(async () => {
             const id = await enqueueJob("link_check", { scope: "all" })
-            setLinkJob({ id, label: "link check", status: "queued" })
+            trackJob(id, "Link check", "All links")
           })
         }
       >
         ⚲ Check links
       </button>
-
-      {linkJob && (
-        <p className={`px-3 text-[0.65rem] ${STATUS_COLOR[linkJob.status] ?? "text-muted"}`}>
-          Links: {STATUS_LABEL[linkJob.status] ?? linkJob.status}
-        </p>
-      )}
 
       <Link href="/admin/activity" className={btn}>
         ☰ Activity

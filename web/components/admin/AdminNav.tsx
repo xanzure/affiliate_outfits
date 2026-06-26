@@ -11,7 +11,13 @@ const TABS = [
   { href: "/admin/metrics", label: "Metrics", icon: "📈" },
 ]
 
-export default function AdminNav({ actions }: { actions?: React.ReactNode }) {
+export default function AdminNav({
+  actions,
+  tracker,
+}: {
+  actions?: React.ReactNode
+  tracker?: React.ReactNode
+}) {
   const pathname = usePathname()
   const isActive = (href: string) => pathname.startsWith(href)
   const [overflow, setOverflow] = useState(false)
@@ -38,6 +44,7 @@ export default function AdminNav({ actions }: { actions?: React.ReactNode }) {
             className="absolute right-3 top-12 w-60 rounded-sm border border-line bg-background p-3 shadow-xl"
             onClick={(e) => e.stopPropagation()}
           >
+            {tracker}
             {actions}
           </div>
         </div>
@@ -61,7 +68,10 @@ export default function AdminNav({ actions }: { actions?: React.ReactNode }) {
             </Link>
           ))}
         </nav>
-        <div className="mt-auto flex flex-col gap-2 pt-6">{actions}</div>
+        <div className="mt-auto flex flex-col gap-3 pt-6">
+          {tracker}
+          {actions}
+        </div>
       </aside>
 
       {/* Mobile: bottom tab bar */}

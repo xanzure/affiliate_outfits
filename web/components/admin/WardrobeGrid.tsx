@@ -4,7 +4,6 @@ import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
 import { ZONES, resolveZone, type Zone } from "@/lib/categories"
 import type { WardrobeItem } from "@/lib/wardrobe"
-import { getJobStatus } from "../../app/admin/(dashboard)/job-actions"
 import {
   archiveProduct,
   intakeProduct,
@@ -12,19 +11,11 @@ import {
   reprocessProduct,
   uploadIntakeImage,
 } from "../../app/admin/(dashboard)/wardrobe/actions"
-
-async function pollJob(id: string): Promise<{ ok: boolean; error?: string }> {
-  for (let i = 0; i < 80; i++) {
-    await new Promise((r) => setTimeout(r, 2500))
-    const { status, result } = await getJobStatus(id)
-    if (status === "done") return { ok: !result.error, error: result.error as string | undefined }
-    if (status === "failed") return { ok: false, error: (result.error as string) ?? "job failed" }
-  }
-  return { ok: false, error: "timed out" }
-}
+import { useTasks } from "./TasksProvider"
 
 export default function WardrobeGrid({ items }: { items: WardrobeItem[] }) {
   const router = useRouter()
+  const { trackJob } = useTasks()
   const [query, setQuery] = useState("")
   const [zone, setZone] = useState<Zone | "all">("all")
   const [showAdd, setShowAdd] = useState(false)
@@ -54,16 +45,38 @@ export default function WardrobeGrid({ items }: { items: WardrobeItem[] }) {
     router.refresh()
   }
 
+  // Image replace runs a cutout job — enqueue it and let the Tasks panel track
+  // it; no need to hold the card busy until the worker finishes.
   async function onReplaceImage(it: WardrobeItem, file: File) {
     setBusyId(it.id)
-    const fd = new FormData()
-    fd.set("file", file)
-    const imageUrl = await uploadIntakeImage(fd)
-    const jobId = await reprocessProduct({ productId: it.id, imageUrl })
-    const res = await pollJob(jobId)
-    setBusyId(null)
-    if (!res.ok) alert(res.error ?? "reprocess failed")
-    router.refresh()
+    try {
+      const fd = new FormData()
+      fd.set("file", file)
+      const imageUrl = await uploadIntakeImage(fd)
+      const jobId = await reprocessProduct({ productId: it.id, imageUrl })
+      trackJob(jobId, "Re-cutout", it.name)
+    } catch (e) {
+      alert(String(e))
+    } finally {
+      setBusyId(null)
+    }
+  }
+
+  // Intake is async: upload (if any), enqueue the scrape/cutout job, hand it to
+  // the Tasks panel, and return immediately so the modal can close.
+  async function onIntake(url: string, category: string, file: File | null) {
+    let imageUrl: string | undefined
+    if (file) {
+      const fd = new FormData()
+      fd.set("file", file)
+      imageUrl = await uploadIntakeImage(fd)
+    }
+    const jobId = await intakeProduct({
+      url,
+      category: category || undefined,
+      imageUrl,
+    })
+    trackJob(jobId, "Intake", url.replace(/^https?:\/\/(www\.)?/, ""))
   }
 
   return (
@@ -113,7 +126,7 @@ export default function WardrobeGrid({ items }: { items: WardrobeItem[] }) {
         </div>
       )}
 
-      {showAdd && <AddModal onClose={() => setShowAdd(false)} onDone={() => router.refresh()} />}
+      {showAdd && <AddModal onClose={() => setShowAdd(false)} onIntake={onIntake} />}
       {editing && (
         <EditModal
           item={editing}
@@ -310,14 +323,21 @@ function EditModal({
   )
 }
 
-function AddModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+function AddModal({
+  onClose,
+  onIntake,
+}: {
+  onClose: () => void
+  onIntake: (url: string, category: string, file: File | null) => Promise<void>
+}) {
   const [url, setUrl] = useState("")
   const [category, setCategory] = useState("")
   const [file, setFile] = useState<File | null>(null)
-  const [status, setStatus] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
 
+  // Just kicks off the job and closes — the Tasks panel tracks it from here, so
+  // there's no need to keep the modal open while the worker scrapes.
   async function submit() {
     if (!url.trim().startsWith("http")) {
       setError("Enter a valid product URL.")
@@ -326,28 +346,11 @@ function AddModal({ onClose, onDone }: { onClose: () => void; onDone: () => void
     setBusy(true)
     setError(null)
     try {
-      let imageUrl: string | undefined
-      if (file) {
-        setStatus("Uploading image…")
-        const fd = new FormData()
-        fd.set("file", file)
-        imageUrl = await uploadIntakeImage(fd)
-      }
-      setStatus(file ? "Adding…" : "Scraping the product page…")
-      const jobId = await intakeProduct({ url: url.trim(), category: category.trim() || undefined, imageUrl })
-      const res = await pollJob(jobId)
-      if (!res.ok) {
-        setError(res.error ?? "Failed to add item.")
-        setStatus(null)
-        setBusy(false)
-        return
-      }
-      onDone()
+      await onIntake(url.trim(), category.trim(), file)
       onClose()
     } catch (e) {
       setError(String(e))
       setBusy(false)
-      setStatus(null)
     }
   }
 
@@ -359,8 +362,9 @@ function AddModal({ onClose, onDone }: { onClose: () => void; onDone: () => void
       >
         <h2 className="mb-1 font-serif text-xl text-foreground">Add a piece</h2>
         <p className="mb-4 text-xs text-muted">
-          Paste a direct product URL. We scrape its image only — never search. If scraping fails,
-          attach an image to add it manually.
+          Paste a direct product URL. We scrape its image only — never search. Runs in the
+          background; track it in the Tasks panel. If scraping fails, attach an image to add it
+          manually.
         </p>
         <div className="space-y-3">
           <input
@@ -386,7 +390,6 @@ function AddModal({ onClose, onDone }: { onClose: () => void; onDone: () => void
               onChange={(e) => setFile(e.target.files?.[0] ?? null)}
             />
           </label>
-          {status && <p className="text-xs text-accent">{status}</p>}
           {error && <p className="text-xs text-red-500">{error}</p>}
         </div>
         <div className="mt-5 flex justify-end gap-2">
@@ -398,7 +401,7 @@ function AddModal({ onClose, onDone }: { onClose: () => void; onDone: () => void
             disabled={busy}
             className="rounded-sm border border-foreground px-4 py-2 text-[0.7rem] tracking-[0.2em] uppercase text-foreground transition-colors hover:border-accent hover:bg-accent hover:text-surface disabled:opacity-50"
           >
-            {busy ? "Working…" : "Add"}
+            {busy ? "Starting…" : "Add"}
           </button>
         </div>
       </div>
