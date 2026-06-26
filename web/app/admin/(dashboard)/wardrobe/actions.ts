@@ -4,6 +4,33 @@ import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { enqueueJob } from "../job-actions"
 
+/** Reclassify a cached item's category (its zone/type) and/or color, so the
+ *  collage engine and the near-match cache treat it correctly. */
+export async function reclassifyProduct(input: {
+  productId: string
+  category?: string
+  color?: string
+}): Promise<void> {
+  const sb = createAdminClient()
+  const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (input.category !== undefined) updates.category = input.category.trim() || null
+  if (input.color !== undefined) {
+    const { data } = await sb
+      .from("products")
+      .select("metadata_json")
+      .eq("id", input.productId)
+      .single()
+    let md: Record<string, unknown> = {}
+    try {
+      md = JSON.parse((data?.metadata_json as string) ?? "{}")
+    } catch {}
+    md.color = input.color.trim() || null
+    updates.metadata_json = JSON.stringify(md)
+  }
+  await sb.from("products").update(updates).eq("id", input.productId)
+  revalidatePath("/admin/wardrobe")
+}
+
 /** Soft-delete: drop from the cache (no new outfit uses it) but keep the row +
  *  image so existing outfits that reference it don't break. */
 export async function archiveProduct(productId: string): Promise<void> {

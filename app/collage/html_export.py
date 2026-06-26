@@ -71,8 +71,10 @@ _ACC_TR = dict(left=74, top=12, width=20, height=17, rot=8,  z=1)
 # bag (mid flank) — a touch bigger, tilted
 _BAG_R  = dict(left=73, top=37, width=24, height=21, rot=5,  z=1)
 _BAG_L  = dict(left=3,  top=37, width=24, height=21, rot=-5, z=1)
-# outerwear side column — much larger; coats need real presence
-_OUTER_L = dict(left=1,  top=13, width=33, height=58, rot=-3, z=1)
+# outerwear side column — large, UPRIGHT (no tilt), centred at the top's level so
+# the coat hangs on the side beside the top rather than sinking toward the hem.
+# Centre y = 28 matches _TOP's centre (top=9 + height 38/2).
+_OUTER_L = dict(left=1,  top=3,  width=33, height=50, rot=0, z=1)
 
 
 def _S(role: str, pos: dict) -> Slot:

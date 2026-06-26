@@ -2,12 +2,13 @@
 
 import { useMemo, useState } from "react"
 import { useRouter } from "next/navigation"
-import { ZONES, type Zone } from "@/lib/categories"
+import { ZONES, resolveZone, type Zone } from "@/lib/categories"
 import type { WardrobeItem } from "@/lib/wardrobe"
 import { getJobStatus } from "../../app/admin/(dashboard)/job-actions"
 import {
   archiveProduct,
   intakeProduct,
+  reclassifyProduct,
   reprocessProduct,
   uploadIntakeImage,
 } from "../../app/admin/(dashboard)/wardrobe/actions"
@@ -27,6 +28,7 @@ export default function WardrobeGrid({ items }: { items: WardrobeItem[] }) {
   const [query, setQuery] = useState("")
   const [zone, setZone] = useState<Zone | "all">("all")
   const [showAdd, setShowAdd] = useState(false)
+  const [editing, setEditing] = useState<WardrobeItem | null>(null)
   const [busyId, setBusyId] = useState<string | null>(null)
 
   const counts = useMemo(() => {
@@ -103,6 +105,7 @@ export default function WardrobeGrid({ items }: { items: WardrobeItem[] }) {
               key={it.id}
               item={it}
               busy={busyId === it.id}
+              onEdit={() => setEditing(it)}
               onArchive={() => onArchive(it)}
               onReplaceImage={(f) => onReplaceImage(it, f)}
             />
@@ -111,6 +114,16 @@ export default function WardrobeGrid({ items }: { items: WardrobeItem[] }) {
       )}
 
       {showAdd && <AddModal onClose={() => setShowAdd(false)} onDone={() => router.refresh()} />}
+      {editing && (
+        <EditModal
+          item={editing}
+          onClose={() => setEditing(null)}
+          onDone={() => {
+            setEditing(null)
+            router.refresh()
+          }}
+        />
+      )}
     </div>
   )
 }
@@ -139,11 +152,13 @@ function Chip({
 function Card({
   item,
   busy,
+  onEdit,
   onArchive,
   onReplaceImage,
 }: {
   item: WardrobeItem
   busy: boolean
+  onEdit: () => void
   onArchive: () => void
   onReplaceImage: (file: File) => void
 }) {
@@ -181,6 +196,12 @@ function Card({
           <Badge muted>{item.source}</Badge>
         </div>
         <div className="mt-2 flex gap-1.5">
+          <button
+            onClick={onEdit}
+            className="flex-1 rounded-sm border border-line px-2 py-1 text-[0.6rem] tracking-[0.12em] uppercase text-muted transition-colors hover:text-foreground"
+          >
+            Edit
+          </button>
           <label className="flex-1 cursor-pointer rounded-sm border border-line px-2 py-1 text-center text-[0.6rem] tracking-[0.12em] uppercase text-muted transition-colors hover:text-foreground">
             Replace
             <input
@@ -214,6 +235,78 @@ function Badge({ children, muted }: { children: React.ReactNode; muted?: boolean
     >
       {children}
     </span>
+  )
+}
+
+function EditModal({
+  item,
+  onClose,
+  onDone,
+}: {
+  item: WardrobeItem
+  onClose: () => void
+  onDone: () => void
+}) {
+  const [category, setCategory] = useState(item.category ?? "")
+  const [color, setColor] = useState(item.color ?? "")
+  const [busy, setBusy] = useState(false)
+  const zone = resolveZone(category)
+
+  async function save() {
+    setBusy(true)
+    await reclassifyProduct({ productId: item.id, category, color })
+    onDone()
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-stone-900/40 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md rounded-sm border border-line bg-background p-5"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h2 className="mb-1 font-serif text-xl text-foreground">Reclassify</h2>
+        <p className="mb-4 line-clamp-1 text-xs text-muted">{item.name}</p>
+        <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-[0.65rem] tracking-[0.15em] uppercase text-muted">
+              Category
+            </label>
+            <input
+              value={category}
+              onChange={(e) => setCategory(e.target.value)}
+              placeholder="e.g. wide-leg trousers"
+              className="w-full rounded-sm border border-line bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+            />
+            <p className="mt-1 text-[0.65rem] text-muted">
+              type tag → <span className="text-accent uppercase tracking-[0.12em]">{zone}</span>
+            </p>
+          </div>
+          <div>
+            <label className="mb-1 block text-[0.65rem] tracking-[0.15em] uppercase text-muted">
+              Color
+            </label>
+            <input
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              placeholder="e.g. chocolate brown"
+              className="w-full rounded-sm border border-line bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+            />
+          </div>
+        </div>
+        <div className="mt-5 flex justify-end gap-2">
+          <button onClick={onClose} className="px-3 py-2 text-[0.7rem] tracking-[0.2em] uppercase text-muted">
+            Cancel
+          </button>
+          <button
+            onClick={save}
+            disabled={busy}
+            className="rounded-sm border border-foreground px-4 py-2 text-[0.7rem] tracking-[0.2em] uppercase text-foreground transition-colors hover:border-accent hover:bg-accent hover:text-surface disabled:opacity-50"
+          >
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
