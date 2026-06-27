@@ -37,15 +37,18 @@ def prepare_product_images(
     *,
     image_service: ImageService | None = None,
     asset_storage: SupabaseAssetStorage | None = None,
+    force: bool = False,
 ) -> list[PreparedImage]:
     service = image_service or ImageService()
     storage = asset_storage or asset_storage_from_env()
 
     # Split products into cache hits (already processed) and ones needing work.
     # Each work item carries an isolation prompt so Runflow extracts the exact piece.
+    # `force` skips the cache check — used for raw user uploads, which land in
+    # Supabase storage and would otherwise look "already processed".
     needs_processing: list[tuple[str, str, str | None]] = []  # (asset_id, url, prompt)
     for product in products:
-        if _is_already_processed(product, service):
+        if not force and _is_already_processed(product, service):
             logger.info("cache hit %s — reusing processed image", product.id)
         elif product.image_url:
             needs_processing.append((product.id, product.image_url, _isolation_prompt(product)))

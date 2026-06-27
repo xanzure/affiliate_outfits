@@ -568,8 +568,18 @@ def _result_from_apify_item(item: dict[str, Any], *, category: str | None) -> Pr
     if not url or not image or not name:
         return None  # need a real product page + image to be useful
 
-    offers = item.get("offers") if isinstance(item.get("offers"), dict) else {}
+    # offers can be a dict, or a list of offers (schema.org allows both).
+    offers_raw = item.get("offers")
+    if isinstance(offers_raw, list):
+        offers_raw = next((o for o in offers_raw if isinstance(o, dict)), None)
+    offers = offers_raw if isinstance(offers_raw, dict) else {}
     brand = item.get("brand") if isinstance(item.get("brand"), dict) else {}
+
+    # offers.price is often a string ("120.00") in JSON-LD — fall back to the
+    # string parser so we don't silently drop it, then to a top-level price.
+    raw_price = offers.get("price")
+    if raw_price is None:
+        raw_price = item.get("price")
 
     return ProductSearchResult(
         retailer=_retailer_from_url(url),
@@ -577,7 +587,7 @@ def _result_from_apify_item(item: dict[str, Any], *, category: str | None) -> Pr
         url=url,
         category=category,
         image_url=image,
-        price_cents=_price_to_cents(offers.get("price")),
+        price_cents=_price_to_cents(raw_price) or _parse_price(raw_price),
         currency=_normalize_currency(offers.get("priceCurrency")),
         source="apify",
         metadata={"brand": _clean_text(brand.get("slogan")), "description": _clean_text(item.get("description"))},

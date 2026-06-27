@@ -165,14 +165,19 @@ def _handle_regenerate_image(conn, payload: dict) -> dict:
 
 
 def _handle_intake_product(conn, payload: dict) -> dict:
-    """Manual wardrobe intake: scrape ONE product URL (Apify detailsUrls), or use
-    a manually-uploaded image, then process + store. Specific error on scrape fail."""
+    """Manual wardrobe intake. We ALWAYS scrape the product URL for metadata
+    (name, price, brand, description); a user-uploaded image only replaces the
+    *visual* (and is run through the cutout since it's raw). Category and colour
+    are derived from the scraped text when not given explicitly, so every field
+    is filled unless it genuinely can't be determined."""
     from dataclasses import replace
+    from app.collage.export import _resolve_zone
     from app.config import load_settings
     from app.pipelines.image_pipeline import prepare_product_images
     from app.pipelines.product_pipeline import _store_product_candidates
     from app.services.affiliate_service import affiliate_resolver_from_name
     from app.services.image_service import ImageService
+    from app.services.product_cache import extract_color_word
     from app.services.product_search_service import (
         ProductSearchResult, scrape_product_url, _retailer_from_url,
     )
@@ -182,29 +187,55 @@ def _handle_intake_product(conn, payload: dict) -> dict:
     if not url.startswith(("http://", "https://")):
         return {"error": "a valid product URL is required"}
     manual_image = payload.get("image_url")
-    category = payload.get("category")
+    category = (payload.get("category") or "").strip() or None
 
-    if manual_image:
+    # Scrape for metadata regardless of whether an image was uploaded.
+    scraped = None
+    try:
+        scraped = scrape_product_url(url, api_token=settings.apify_token or "", category=category)
+    except Exception as exc:  # noqa: BLE001
+        log.warning("intake scrape failed for %s: %s", url[:80], exc)
+
+    if scraped is None and not manual_image:
+        return {"error": "image could not be scraped from that URL — upload an image manually to add it"}
+
+    if scraped is not None:
+        result = replace(
+            scraped,
+            image_url=manual_image or scraped.image_url,
+            source="manual" if manual_image else scraped.source,
+        )
+    else:
         result = ProductSearchResult(
             retailer=_retailer_from_url(url), name=payload.get("name") or "Wardrobe item",
             url=url, category=category, image_url=manual_image, source="manual",
         )
-    else:
-        result = scrape_product_url(url, api_token=settings.apify_token or "", category=category)
-        if result is None or not result.image_url:
-            return {"error": "image could not be scraped from that URL — upload an image manually to add it"}
+
+    # Fill category + colour from the richest text available, unless given.
+    description = result.metadata.get("description") if isinstance(result.metadata, dict) else None
+    text = " ".join(t for t in (result.name, description) if t)
+    final_category = category or result.category or _resolve_zone(result.name)
+    color = payload.get("color") or extract_color_word(text)
+    result = replace(result, category=final_category)
 
     resolver = affiliate_resolver_from_name(settings.affiliate_provider)
     products = _store_product_candidates(
         conn, [result], tracking_id="wardrobe-intake", affiliate_resolver=resolver,
-        color=payload.get("color"), material=payload.get("material"),
+        color=color, material=payload.get("material"),
     )
     if not products:
         return {"error": "failed to store product"}
-    prepared = prepare_product_images(conn, products, image_service=ImageService(settings))
-    if not prepared and not manual_image:
+    # Uploaded images are raw → force the cutout. Scraped images process normally.
+    prepared = prepare_product_images(
+        conn, products, image_service=ImageService(settings), force=bool(manual_image),
+    )
+    if not prepared:
         return {"error": "image processing failed — upload an image manually to retry"}
-    return {"product_id": products[0].id, "name": products[0].name, "image_ready": len(prepared)}
+    p = products[0]
+    return {
+        "product_id": p.id, "name": p.name, "price_cents": p.price_cents,
+        "category": final_category, "color": color, "image_ready": len(prepared),
+    }
 
 
 def _handle_reprocess_product(conn, payload: dict) -> dict:
@@ -215,10 +246,15 @@ def _handle_reprocess_product(conn, payload: dict) -> dict:
     from app.services.image_service import ImageService
 
     pid = payload["product_id"]
-    if payload.get("image_url"):  # re-upload forces a real reprocess
+    has_upload = bool(payload.get("image_url"))
+    if has_upload:  # re-upload forces a real reprocess
         update_product_image_url(conn, pid, payload["image_url"])
     product = get_product(conn, pid)
-    prepared = prepare_product_images(conn, [product], image_service=ImageService(load_settings()))
+    # A fresh upload is raw → force the cutout instead of treating the storage
+    # URL as already-processed.
+    prepared = prepare_product_images(
+        conn, [product], image_service=ImageService(load_settings()), force=has_upload,
+    )
     return {"reprocessed": len(prepared)}
 
 
