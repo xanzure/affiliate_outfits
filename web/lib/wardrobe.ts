@@ -13,6 +13,7 @@ export type WardrobeItem = {
   url: string
   source: string // apify / google_shopping / manual
   color: string | null
+  brand: string | null
   inUse: boolean
   createdAt: string
 }
@@ -40,10 +41,12 @@ export async function getWardrobe(): Promise<WardrobeItem[]> {
   return (products ?? []).map((p) => {
     let source = "unknown"
     let color: string | null = null
+    let brand: string | null = null
     try {
       const m = JSON.parse((p.metadata_json as string) ?? "{}")
       source = (m.product_source as string) ?? "unknown"
       color = (m.color as string) ?? null
+      brand = (m.brand as string) ?? null
     } catch {}
     return {
       id: p.id as string,
@@ -57,6 +60,7 @@ export async function getWardrobe(): Promise<WardrobeItem[]> {
       url: p.url as string,
       source,
       color,
+      brand,
       inUse: inUse.has(p.id as string),
       createdAt: p.created_at as string,
     }

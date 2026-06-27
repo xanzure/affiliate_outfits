@@ -263,12 +263,13 @@ function EditModal({
   const [name, setName] = useState(item.name ?? "")
   const [category, setCategory] = useState(item.category ?? "")
   const [color, setColor] = useState(item.color ?? "")
+  const [brand, setBrand] = useState(item.brand ?? "")
   const [busy, setBusy] = useState(false)
   const zone = resolveZone(category)
 
   async function save() {
     setBusy(true)
-    await reclassifyProduct({ productId: item.id, name, category, color })
+    await reclassifyProduct({ productId: item.id, name, category, color, brand })
     onDone()
   }
 
@@ -314,6 +315,17 @@ function EditModal({
               value={color}
               onChange={(e) => setColor(e.target.value)}
               placeholder="e.g. chocolate brown"
+              className="w-full rounded-sm border border-line bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-[0.65rem] tracking-[0.15em] uppercase text-muted">
+              Brand
+            </label>
+            <input
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              placeholder="e.g. Mango"
               className="w-full rounded-sm border border-line bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
             />
           </div>

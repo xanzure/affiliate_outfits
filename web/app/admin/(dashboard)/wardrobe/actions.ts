@@ -11,12 +11,13 @@ export async function reclassifyProduct(input: {
   name?: string
   category?: string
   color?: string
+  brand?: string
 }): Promise<void> {
   const sb = createAdminClient()
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
   if (input.name !== undefined && input.name.trim()) updates.name = input.name.trim()
   if (input.category !== undefined) updates.category = input.category.trim() || null
-  if (input.color !== undefined) {
+  if (input.color !== undefined || input.brand !== undefined) {
     const { data } = await sb
       .from("products")
       .select("metadata_json")
@@ -26,7 +27,8 @@ export async function reclassifyProduct(input: {
     try {
       md = JSON.parse((data?.metadata_json as string) ?? "{}")
     } catch {}
-    md.color = input.color.trim() || null
+    if (input.color !== undefined) md.color = input.color.trim() || null
+    if (input.brand !== undefined) md.brand = input.brand.trim() || null
     updates.metadata_json = JSON.stringify(md)
   }
   await sb.from("products").update(updates).eq("id", input.productId)
