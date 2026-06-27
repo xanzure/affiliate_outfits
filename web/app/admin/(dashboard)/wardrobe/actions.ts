@@ -4,15 +4,17 @@ import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { enqueueJob } from "../job-actions"
 
-/** Reclassify a cached item's category (its zone/type) and/or color, so the
+/** Reclassify a cached item's name, category (its zone/type) and/or color, so the
  *  collage engine and the near-match cache treat it correctly. */
 export async function reclassifyProduct(input: {
   productId: string
+  name?: string
   category?: string
   color?: string
 }): Promise<void> {
   const sb = createAdminClient()
   const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+  if (input.name !== undefined && input.name.trim()) updates.name = input.name.trim()
   if (input.category !== undefined) updates.category = input.category.trim() || null
   if (input.color !== undefined) {
     const { data } = await sb

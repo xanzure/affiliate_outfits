@@ -260,6 +260,7 @@ function EditModal({
   onClose: () => void
   onDone: () => void
 }) {
+  const [name, setName] = useState(item.name ?? "")
   const [category, setCategory] = useState(item.category ?? "")
   const [color, setColor] = useState(item.color ?? "")
   const [busy, setBusy] = useState(false)
@@ -267,7 +268,7 @@ function EditModal({
 
   async function save() {
     setBusy(true)
-    await reclassifyProduct({ productId: item.id, category, color })
+    await reclassifyProduct({ productId: item.id, name, category, color })
     onDone()
   }
 
@@ -278,8 +279,19 @@ function EditModal({
         onClick={(e) => e.stopPropagation()}
       >
         <h2 className="mb-1 font-serif text-xl text-foreground">Reclassify</h2>
-        <p className="mb-4 line-clamp-1 text-xs text-muted">{item.name}</p>
+        <p className="mb-4 line-clamp-1 text-xs text-muted">{item.retailer}</p>
         <div className="space-y-3">
+          <div>
+            <label className="mb-1 block text-[0.65rem] tracking-[0.15em] uppercase text-muted">
+              Name
+            </label>
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. cream ruched blouse"
+              className="w-full rounded-sm border border-line bg-surface px-3 py-2 text-sm text-foreground outline-none focus:border-accent"
+            />
+          </div>
           <div>
             <label className="mb-1 block text-[0.65rem] tracking-[0.15em] uppercase text-muted">
               Category
