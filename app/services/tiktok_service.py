@@ -152,6 +152,8 @@ def _caption_with_hashtags(caption: str, hashtags: list[str]) -> str:
 
 
 def _post_json(url: str, payload: dict[str, Any], *, bearer_token: str) -> dict[str, Any]:
+    from urllib.error import HTTPError
+
     body = json.dumps(payload).encode("utf-8")
     request = Request(
         url,
@@ -163,8 +165,14 @@ def _post_json(url: str, payload: dict[str, Any], *, bearer_token: str) -> dict[
             "User-Agent": "affiliate-outfits/0.1",
         },
     )
-    with urlopen(request, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        # urllib's HTTPError str() is just "HTTP Error 401: Unauthorized" — the
+        # useful detail (e.g. "access_token_invalid") is in the response body.
+        detail = exc.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"TikTok API HTTP {exc.code}: {detail}") from exc
 
 
 def _utf16_trim(value: str, max_units: int) -> str:

@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { enqueueJob } from "../job-actions"
 
 async function logAction(
   action: string,
@@ -70,6 +71,15 @@ export async function editCaption(id: string, caption: string) {
     .eq("id", id)
   await logAction("edit_caption", id)
   revalidatePath("/admin/schedule")
+}
+
+/** Re-attempt a live platform post for a failed post. Runs on the worker
+ *  (Python) since that's where the TikTok/Pinterest clients live — returns the
+ *  job id so the caller can track it in the Tasks panel. */
+export async function retryPost(id: string): Promise<string> {
+  const jobId = await enqueueJob("retry_post", { post_id: id })
+  await logAction("retry_post", id)
+  return jobId
 }
 
 export async function deletePost(id: string) {

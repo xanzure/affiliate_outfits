@@ -3,7 +3,7 @@ import PostCard from "@/components/admin/PostCard"
 
 export const dynamic = "force-dynamic"
 
-type Section = "needsApproval" | "scheduled" | "queue"
+type Section = "needsApproval" | "scheduled" | "queue" | "failed"
 
 function Section({
   title,
@@ -40,7 +40,7 @@ function Section({
 
 export default async function SchedulePage() {
   await reconcileSchedule()
-  const { needsApproval, scheduled, queue } = await getScheduleData()
+  const { needsApproval, scheduled, queue, failed } = await getScheduleData()
 
   return (
     <div>
@@ -48,9 +48,18 @@ export default async function SchedulePage() {
         <h1 className="font-serif text-3xl text-foreground sm:text-4xl">Schedule</h1>
         <p className="mt-1 text-sm text-muted">
           {scheduled.length} scheduled · {queue.length} queued · {needsApproval.length} awaiting approval
+          {failed.length > 0 && ` · ${failed.length} failed`}
         </p>
       </header>
 
+      {failed.length > 0 && (
+        <Section
+          title="Failed"
+          hint="publish attempt errored — fix the cause, then retry"
+          posts={failed}
+          section="failed"
+        />
+      )}
       <Section
         title="Needs Approval"
         hint="approve to enter the queue"

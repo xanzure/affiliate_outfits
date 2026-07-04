@@ -258,6 +258,30 @@ def _handle_reprocess_product(conn, payload: dict) -> dict:
     return {"reprocessed": len(prepared)}
 
 
+def _handle_retry_post(conn, payload: dict) -> dict:
+    """Re-attempt a live platform post for a single post row (e.g. after a
+    failed publish). Reuses the same autopublish path the daily pipeline uses,
+    so a fixed token / fixed scope / fixed logging bug takes effect."""
+    from app.config import load_settings
+    from app.db.posts import get_post
+    from app.pipelines.publish_pipeline import autopublish_posts
+
+    post_id = payload.get("post_id")
+    if not post_id:
+        return {"error": "post_id is required"}
+
+    settings = load_settings()
+    post = get_post(conn, post_id)
+    result = autopublish_posts(conn, [post], settings=settings)
+    if result.published:
+        return {"status": "published", "post_id": post_id}
+    if result.failed:
+        failed_post = result.failed[0]
+        error = failed_post.metadata.get("api_error") if failed_post.metadata else None
+        return {"error": error or "publish failed", "post_id": post_id}
+    return {"status": "skipped", "post_id": post_id}
+
+
 HANDLERS = {
     "link_check": _handle_link_check,
     "run_concept": _handle_run_concept,
@@ -265,6 +289,7 @@ HANDLERS = {
     "regenerate_image": _handle_regenerate_image,
     "intake_product": _handle_intake_product,
     "reprocess_product": _handle_reprocess_product,
+    "retry_post": _handle_retry_post,
 }
 
 

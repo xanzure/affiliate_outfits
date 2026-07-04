@@ -33,7 +33,7 @@ for _line in (Path(__file__).parents[1] / ".env").read_text().splitlines():
 CLIENT_ID = os.environ.get("PINTEREST_CLIENT_ID", "")
 CLIENT_SECRET = os.environ.get("PINTEREST_CLIENT_SECRET", "")
 REDIRECT_URI = os.environ.get("PINTEREST_REDIRECT_URI", "http://localhost:3100/")
-SCOPE = "pins:write,boards:read,user_accounts:read"
+SCOPE = "pins:write,pins:read,boards:read,boards:write,user_accounts:read"
 
 TOKEN_URL = "https://api.pinterest.com/v5/oauth/token"
 

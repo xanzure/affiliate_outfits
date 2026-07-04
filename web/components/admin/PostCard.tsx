@@ -7,10 +7,12 @@ import {
   cancelSchedule,
   deletePost,
   editCaption,
+  retryPost,
   schedulePostAt,
 } from "@/app/admin/(dashboard)/schedule/actions"
+import { useTasks } from "./TasksProvider"
 
-type Section = "needsApproval" | "scheduled" | "queue"
+type Section = "needsApproval" | "scheduled" | "queue" | "failed"
 
 function fmtTime(iso: string | null): string {
   if (!iso) return ""
@@ -33,6 +35,7 @@ function PlatformBadge({ platform }: { platform: string }) {
 }
 
 export default function PostCard({ post, section }: { post: AdminPost; section: Section }) {
+  const { trackJob } = useTasks()
   const [slide, setSlide] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -78,6 +81,20 @@ export default function PostCard({ post, section }: { post: AdminPost; section: 
               {section === "needsApproval" && (
                 <button onClick={run(() => approvePost(post.id))} className="block w-full px-3 py-2 text-left hover:bg-accent/10 hover:text-accent">
                   Approve
+                </button>
+              )}
+              {section === "failed" && (
+                <button
+                  onClick={() => {
+                    setMenuOpen(false)
+                    start(async () => {
+                      const jobId = await retryPost(post.id)
+                      trackJob(jobId, "Retry post", post.caption ?? post.platform)
+                    })
+                  }}
+                  className="block w-full px-3 py-2 text-left hover:bg-accent/10 hover:text-accent"
+                >
+                  Retry
                 </button>
               )}
               <button
@@ -166,6 +183,12 @@ export default function PostCard({ post, section }: { post: AdminPost; section: 
           <span>{post.conceptName}</span>
           {deadLinks > 0 && <span className="text-amber-600">⚠ {deadLinks} dead link{deadLinks > 1 ? "s" : ""}</span>}
         </div>
+
+        {section === "failed" && post.apiError && (
+          <p className="mt-2 break-words rounded-sm bg-red-50 px-2 py-1.5 text-[0.7rem] text-red-600">
+            {post.apiError}
+          </p>
+        )}
 
         {picking && (
           <div className="mt-3 flex flex-wrap items-center gap-2">

@@ -16,12 +16,14 @@ export interface AdminPost {
   conceptName: string | null
   slides: string[]
   linkCheck: { checked_at?: string; dead?: string[] } | null
+  apiError: string | null
 }
 
 export interface ScheduleData {
   needsApproval: AdminPost[]
   scheduled: AdminPost[]
   queue: AdminPost[]
+  failed: AdminPost[]
 }
 
 const PINTEREST_SLOT_HOURS = [10, 12, 14, 16, 18]
@@ -77,6 +79,7 @@ function toAdminPost(
     conceptName: conceptNames[(row.concept_id as string) ?? ""] ?? null,
     slides: resolveSlides(row, collageByOutfit),
     linkCheck,
+    apiError: (meta(row).api_error as string) ?? null,
   }
 }
 
@@ -421,6 +424,9 @@ export async function getScheduleData(): Promise<ScheduleData> {
   const queue = posts
     .filter((p) => p.status === "draft" && p.approved && !p.scheduled_for)
     .sort((a, b) => a.id.localeCompare(b.id))
+  const failed = posts
+    .filter((p) => p.status === "failed")
+    .sort((a, b) => a.id.localeCompare(b.id))
 
-  return { needsApproval, scheduled, queue }
+  return { needsApproval, scheduled, queue, failed }
 }
