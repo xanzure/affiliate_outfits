@@ -238,7 +238,9 @@ def autopublish_due_posts(
     candidates = [
         post
         for post in list_posts(conn)
-        if post.platform in {"tiktok", "pinterest"} and post.status in {"draft", "scheduled"}
+        if post.platform in {"tiktok", "pinterest"}
+        and post.status in {"draft", "scheduled"}
+        and post.approved  # never auto-publish a post still sitting in Needs Approval
     ]
     return autopublish_posts(
         conn,

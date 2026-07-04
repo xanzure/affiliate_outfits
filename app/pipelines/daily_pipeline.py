@@ -25,7 +25,6 @@ from app.pipelines.collage_pipeline import render_html_collage_for_images
 from app.pipelines.image_pipeline import prepare_product_images
 from app.pipelines.publish_pipeline import (
     LocalPublishResult,
-    autopublish_posts,
     create_local_publish_records,
     create_local_publish_records_for_outfit_set,
 )
@@ -168,7 +167,10 @@ def run_daily_for_brief(
             collage_path=collage.collage_url or collage_export.image_path,
             engagement_output=engagement_output,
         )
-        autopublish_posts(conn, publish_result.posts, settings=settings)
+        # NOTE: posts land as drafts (approved=False) — Needs Approval — and are
+        # never auto-published here. Publishing only happens once a human
+        # approves + schedules them (or via the due-post cron, which also
+        # requires approved=True — see autopublish_due_posts).
         scheduled_brief = mark_scheduled_concept_posted(conn, scheduled_brief)
 
     elapsed = time.time() - t0
@@ -256,7 +258,10 @@ def run_daily_outfit_set_for_concept(
             collage_paths=[result.collage_url or result.collage_path for result in outfit_results],
             engagement_output=engagement_output,
         )
-        autopublish_posts(conn, publish_result.posts, settings=settings)
+        # See note above — no immediate autopublish. The Pinterest posts in a
+        # batch set are pre-scheduled (status="scheduled") and will go out via
+        # the due-post cron once approved; the TikTok slideshow lands as a
+        # draft needing approval like any other post.
         scheduled_concept = mark_scheduled_concept_posted(conn, scheduled_concept)
 
     return DailyConceptSetResult(
