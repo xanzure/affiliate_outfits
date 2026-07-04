@@ -11,9 +11,6 @@ from app.db.posts import create_post
 from app.config import Settings, load_settings
 
 
-PINTEREST_CREATE_PIN_URL = "https://api.pinterest.com/v5/pins"
-
-
 @dataclass(frozen=True)
 class PinterestPublishResult:
     pin_id: str
@@ -49,7 +46,7 @@ class PinterestApiClient:
             payload["link"] = link
 
         response = _post_json(
-            PINTEREST_CREATE_PIN_URL,
+            f"{self.settings.pinterest_api_base_url}/v5/pins",
             payload,
             bearer_token=self.settings.pinterest_access_token or "",
         )

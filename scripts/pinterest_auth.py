@@ -10,8 +10,17 @@ Commands:
 Requires in .env:
   PINTEREST_CLIENT_ID
   PINTEREST_CLIENT_SECRET
-  PINTEREST_REDIRECT_URI   (e.g. http://localhost:3100/)
-  PINTEREST_REFRESH_TOKEN  (only for 'refresh' command)
+  PINTEREST_REDIRECT_URI     (e.g. http://localhost:3100/)
+  PINTEREST_REFRESH_TOKEN    (only for 'refresh' command)
+  PINTEREST_API_BASE_URL     (optional — defaults to the Sandbox API,
+                              https://api-sandbox.pinterest.com, required for
+                              Trial-access apps; switch to
+                              https://api.pinterest.com once approved for
+                              Standard access)
+
+Sandbox tokens/boards are separate from production — a token or board ID
+generated while PINTEREST_API_BASE_URL points at production will NOT work
+against sandbox, and vice versa.
 """
 from __future__ import annotations
 
@@ -35,7 +44,12 @@ CLIENT_SECRET = os.environ.get("PINTEREST_CLIENT_SECRET", "")
 REDIRECT_URI = os.environ.get("PINTEREST_REDIRECT_URI", "http://localhost:3100/")
 SCOPE = "pins:write,pins:read,boards:read,boards:write,user_accounts:read"
 
-TOKEN_URL = "https://api.pinterest.com/v5/oauth/token"
+# Trial-access apps can only create pins against api-sandbox.pinterest.com —
+# production api.pinterest.com returns 403 "Apps with Trial access may not
+# create Pins in production". Sandbox uses a SEPARATE token from production,
+# so this must match PINTEREST_API_BASE_URL in the app's own .env.
+API_BASE = os.environ.get("PINTEREST_API_BASE_URL", "https://api-sandbox.pinterest.com").rstrip("/")
+TOKEN_URL = f"{API_BASE}/v5/oauth/token"
 
 
 def _require_credentials() -> None:
@@ -116,7 +130,7 @@ def cmd_boards() -> None:
         print("Error: PINTEREST_ACCESS_TOKEN must be set in .env first")
         sys.exit(1)
     req = Request(
-        "https://api.pinterest.com/v5/boards?page_size=25",
+        f"{API_BASE}/v5/boards?page_size=25",
         headers={"Authorization": f"Bearer {access_token}"},
     )
     with urlopen(req) as resp:

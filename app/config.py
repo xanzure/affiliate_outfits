@@ -75,6 +75,7 @@ class Settings:
     pinterest_access_token: str | None = None
     pinterest_refresh_token: str | None = None
     pinterest_board_id: str | None = None
+    pinterest_api_base_url: str = "https://api-sandbox.pinterest.com"
     supabase_db_url: str | None = None
     supabase_url: str | None = None
 
@@ -131,6 +132,12 @@ def load_settings(env_file: Path | None = None) -> Settings:
         pinterest_access_token=read("PINTEREST_ACCESS_TOKEN", "") or None,
         pinterest_refresh_token=read("PINTEREST_REFRESH_TOKEN", "") or None,
         pinterest_board_id=read("PINTEREST_BOARD_ID", "") or None,
+        # Trial-access apps must post against Sandbox, not production — see
+        # scripts/pinterest_auth.py docstring. Switch to api.pinterest.com
+        # once the app is approved for Standard access.
+        pinterest_api_base_url=read(
+            "PINTEREST_API_BASE_URL", "https://api-sandbox.pinterest.com"
+        ).rstrip("/"),
         supabase_db_url=read("SUPABASE_DB_URL", "") or None,
         supabase_url=read("SUPABASE_URL", "").rstrip("/") or None,
     )
