@@ -59,6 +59,10 @@ class Settings:
     awin_oauth2_token: str | None = None
     awin_publisher_id: str | None = None
     autoposting_enabled: bool = False
+    # Hours between auto-posts per platform. The queue publishes the head of each
+    # platform's FIFO queue at most once per this window. Lower it (e.g. 0.05)
+    # to smoke-test the whole flow in minutes.
+    post_cooldown_hours: float = 24.0
     public_asset_base_url: str | None = None
     tiktok_client_key: str | None = None
     tiktok_client_secret: str | None = None
@@ -116,6 +120,7 @@ def load_settings(env_file: Path | None = None) -> Settings:
         awin_oauth2_token=read("AWIN_OAUTH2_TOKEN", "") or None,
         awin_publisher_id=read("AWIN_PUBLISHER_ID", "") or None,
         autoposting_enabled=_get_bool(read("AUTOPOSTING_ENABLED", "false")),
+        post_cooldown_hours=float(read("POST_COOLDOWN_HOURS", "24") or "24"),
         public_asset_base_url=read("PUBLIC_ASSET_BASE_URL", "").rstrip("/") or None,
         tiktok_client_key=read("TIKTOK_CLIENT_KEY", "") or None,
         tiktok_client_secret=read("TIKTOK_CLIENT_SECRET", "") or None,

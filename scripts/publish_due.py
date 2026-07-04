@@ -10,13 +10,16 @@ except ModuleNotFoundError:
 add_project_root_to_path()
 
 from app.config import load_settings
-from app.pipelines.publish_pipeline import autopublish_due_posts
+from app.pipelines.publish_pipeline import process_queue_tick
 from app.services.storage_service import StorageService
 from app.utils.logging import configure_logging, get_logger
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Publish due TikTok/Pinterest posts.")
+    parser = argparse.ArgumentParser(
+        description="Run one queue cooldown tick (publish the head of each "
+        "platform's queue if its 24h window has elapsed)."
+    )
     parser.parse_args()
 
     settings = load_settings()
@@ -27,7 +30,7 @@ def main() -> None:
     service.initialize()
 
     with service.connection() as conn:
-        result = autopublish_due_posts(conn, settings=settings)
+        result = process_queue_tick(conn, settings=settings)
 
     logger.info(
         "autopublish complete published=%s failed=%s skipped=%s",

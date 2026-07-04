@@ -161,48 +161,34 @@ def list_posts_for_concept(conn: sqlite3.Connection, concept_id: str) -> list[Po
 
 # ── dashboard scheduling helpers ─────────────────────────────────────────────
 
+def _queue_order_key(epoch_ms: int | None = None) -> str:
+    """Fixed-width numeric string for lexicographic FIFO ordering. Approvals use
+    epoch millis (~13 digits) so new posts append to the tail; explicit reorders
+    rewrite to small sequential ints — both zero-padded to 15 so the plain string
+    sort matches numeric order and reordered items always precede newer ones."""
+    import time as _time
+
+    value = epoch_ms if epoch_ms is not None else int(_time.time() * 1000)
+    return str(value).zfill(15)
+
+
 def approve_post(conn: sqlite3.Connection, post_id: str) -> Post:
-    """Move a needs-approval draft into the FIFO queue."""
+    """Move a needs-approval draft into the FIFO queue (appended to the tail)."""
     conn.execute(
-        "UPDATE posts SET approved = ?, updated_at = ? WHERE id = ?",
-        (True, utc_now(), post_id),
+        "UPDATE posts SET approved = ?, queue_order = ?, updated_at = ? WHERE id = ?",
+        (True, _queue_order_key(), utc_now(), post_id),
     )
     return get_post(conn, post_id)
 
 
-def schedule_post(
-    conn: sqlite3.Connection,
-    post_id: str,
-    *,
-    scheduled_for: str,
-    is_manual: bool = True,
-) -> Post:
-    """Pin a post to a specific time (manual override bypasses the FIFO queue)."""
-    conn.execute(
-        """
-        UPDATE posts
-        SET status = 'scheduled', scheduled_for = ?, is_manual_schedule = ?,
-            approved = ?, updated_at = ?
-        WHERE id = ?
-        """,
-        (scheduled_for, is_manual, True, utc_now(), post_id),
-    )
-    return get_post(conn, post_id)
-
-
-def cancel_schedule(conn: sqlite3.Connection, post_id: str) -> Post:
-    """Unschedule a post and send it to the back of the queue."""
+def reorder_queue(conn: sqlite3.Connection, ordered_ids: list[str]) -> None:
+    """Rewrite queue_order for an explicit ordering (top → bottom)."""
     now = utc_now()
-    conn.execute(
-        """
-        UPDATE posts
-        SET status = 'draft', scheduled_for = NULL, is_manual_schedule = ?,
-            queue_order = ?, updated_at = ?
-        WHERE id = ?
-        """,
-        (False, now, now, post_id),
-    )
-    return get_post(conn, post_id)
+    for index, post_id in enumerate(ordered_ids):
+        conn.execute(
+            "UPDATE posts SET queue_order = ?, updated_at = ? WHERE id = ?",
+            (_queue_order_key(index), now, post_id),
+        )
 
 
 def update_post_caption(conn: sqlite3.Connection, post_id: str, caption: str) -> Post:

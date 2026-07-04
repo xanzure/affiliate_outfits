@@ -2,16 +2,15 @@ from __future__ import annotations
 
 import sqlite3
 from dataclasses import dataclass
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import datetime, timedelta, timezone
 
 UTC = timezone.utc  # datetime.UTC only exists on Python 3.11+; this is portable
 from pathlib import Path
 from typing import Any
 
 from app.config import Settings, load_settings
-from app.db._helpers import EST, est_today
 from app.db.models import Outfit, Post, Product
-from app.db.posts import list_posts, update_post_metadata, update_post_status
+from app.db.posts import list_posts, list_queued_posts, update_post_metadata, update_post_status
 from app.services.pinterest_service import PinterestApiClient, create_local_pinterest_post
 from app.services.tiktok_service import TikTokApiClient, create_local_tiktok_post, create_local_tiktok_slideshow_post
 
@@ -82,8 +81,6 @@ def create_local_publish_records_for_outfit_set(
     products_by_outfit: list[list[Product]],
     collage_paths: list[Path | str],
     engagement_output: dict[str, Any],
-    schedule_date_est: str | None = None,
-    pinterest_spacing_hours: int = 2,
 ) -> LocalPublishResult:
     if not outfits:
         raise ValueError("publish set must include at least one outfit")
@@ -117,13 +114,11 @@ def create_local_publish_records_for_outfit_set(
         )
     ]
 
-    schedule_times = pinterest_schedule_times(
-        count=len(outfits),
-        schedule_date_est=schedule_date_est,
-        spacing_hours=pinterest_spacing_hours,
-    )
-    for index, (outfit, products, collage_path, pinterest, scheduled_at) in enumerate(
-        zip(outfits, products_by_outfit, collage_paths, pinterest_posts, schedule_times, strict=True),
+    # Each outfit's Pinterest post lands as a plain draft (Needs Approval). There
+    # is no pre-scheduling any more — approval + the per-platform 24h queue
+    # cooldown decide when each goes out.
+    for index, (outfit, products, collage_path, pinterest) in enumerate(
+        zip(outfits, products_by_outfit, collage_paths, pinterest_posts, strict=True),
         start=1,
     ):
         posts.append(
@@ -135,8 +130,6 @@ def create_local_publish_records_for_outfit_set(
                 title=pinterest["title"],
                 description=pinterest["description"],
                 hashtags=pinterest["hashtags"],
-                status="scheduled",
-                scheduled_at=scheduled_at,
                 metadata={
                     **shared_metadata,
                     "outfit_set_index": index,
@@ -174,10 +167,11 @@ def autopublish_posts(
         if post.status == "published":
             skipped.append(post)
             continue
-        if post.status == "scheduled" and not _post_is_due(post, now):
-            skipped.append(post)
-            continue
 
+        # Stamp the attempt time up front (win or lose) — this is what the queue
+        # cooldown keys off, so a failed attempt still consumes the 24h window
+        # instead of machine-gunning the whole queue into Failed on a bad config.
+        attempt_iso = now.astimezone(UTC).isoformat(timespec="seconds")
         try:
             if post.platform == "tiktok":
                 result_id, raw_response = _publish_tiktok_post(
@@ -202,6 +196,7 @@ def autopublish_posts(
                     "local_only": False,
                     "api_posting_enabled": True,
                     "api_response": raw_response,
+                    "last_publish_attempt_at": attempt_iso,
                 },
             )
             published.append(
@@ -210,7 +205,7 @@ def autopublish_posts(
                     post.id,
                     status="published",
                     platform_post_id=result_id,
-                    published_at=now.astimezone(UTC).isoformat(timespec="seconds"),
+                    published_at=attempt_iso,
                 )
             )
         except Exception as exc:
@@ -220,6 +215,7 @@ def autopublish_posts(
                 {
                     "api_posting_enabled": True,
                     "api_error": str(exc),
+                    "last_publish_attempt_at": attempt_iso,
                 },
             )
             failed.append(update_post_status(conn, post.id, status="failed"))
@@ -227,49 +223,62 @@ def autopublish_posts(
     return AutoPublishResult(published=published, failed=failed, skipped=skipped)
 
 
-def autopublish_due_posts(
+def platform_last_attempt(conn: sqlite3.Connection, platform: str) -> datetime | None:
+    """Most recent publish attempt (success or failure) for a platform, as a
+    tz-aware UTC datetime. Reads both `published_at` (set on success) and the
+    `last_publish_attempt_at` metadata stamp (set on every attempt), so the
+    cooldown counts failures too. None if the platform has never been attempted."""
+    latest: datetime | None = None
+    for post in list_posts(conn):
+        if post.platform != platform:
+            continue
+        candidates = [post.published_at, post.metadata.get("last_publish_attempt_at")]
+        for raw in candidates:
+            if not isinstance(raw, str) or not raw:
+                continue
+            try:
+                dt = datetime.fromisoformat(raw)
+            except ValueError:
+                continue
+            if dt.tzinfo is None:
+                dt = dt.replace(tzinfo=UTC)
+            if latest is None or dt > latest:
+                latest = dt
+    return latest
+
+
+def process_queue_tick(
     conn: sqlite3.Connection,
     *,
     settings: Settings | None = None,
     now: datetime | None = None,
-    tiktok_client: TikTokApiClient | None = None,
-    pinterest_client: PinterestApiClient | None = None,
 ) -> AutoPublishResult:
-    candidates = [
-        post
-        for post in list_posts(conn)
-        if post.platform in {"tiktok", "pinterest"}
-        and post.status in {"draft", "scheduled"}
-        and post.approved  # never auto-publish a post still sitting in Needs Approval
-    ]
-    return autopublish_posts(
-        conn,
-        candidates,
-        settings=settings,
-        now=now,
-        tiktok_client=tiktok_client,
-        pinterest_client=pinterest_client,
-    )
+    """Publish the head of each platform's FIFO queue when its 24h cooldown has
+    elapsed. Runs on the worker loop (throttled). One post per platform per tick;
+    an empty cooldown (never posted, or >24h ago) fires immediately."""
+    settings = settings or load_settings()
+    now = now or datetime.now(UTC)
 
+    published: list[Post] = []
+    failed: list[Post] = []
+    skipped: list[Post] = []
+    if not settings.autoposting_enabled:
+        return AutoPublishResult(published=published, failed=failed, skipped=skipped)
 
-def pinterest_schedule_times(
-    *,
-    count: int,
-    schedule_date_est: str | None = None,
-    spacing_hours: int = 2,
-    start_hour: int = 10,
-) -> list[str]:
-    if count < 1:
-        raise ValueError("Pinterest schedule count must be at least 1")
-    if spacing_hours < 1:
-        raise ValueError("Pinterest spacing must be at least 1 hour")
+    cooldown = timedelta(hours=settings.post_cooldown_hours)
+    for platform in ("tiktok", "pinterest"):
+        last = platform_last_attempt(conn, platform)
+        if last is not None and (now - last) < cooldown:
+            continue  # still cooling down
+        queue = list_queued_posts(conn, platform)
+        if not queue:
+            continue
+        result = autopublish_posts(conn, [queue[0]], settings=settings, now=now)
+        published.extend(result.published)
+        failed.extend(result.failed)
+        skipped.extend(result.skipped)
 
-    schedule_date = date.fromisoformat(schedule_date_est or est_today())
-    start = datetime.combine(schedule_date, time(hour=start_hour), tzinfo=EST)
-    return [
-        (start + timedelta(hours=spacing_hours * index)).isoformat(timespec="minutes")
-        for index in range(count)
-    ]
+    return AutoPublishResult(published=published, failed=failed, skipped=skipped)
 
 
 def _publish_tiktok_post(
@@ -334,15 +343,6 @@ def _proxied_storage_url(url: str, *, settings: Settings) -> str:
     if not url.startswith(prefix):
         return url
     return f"{settings.public_asset_base_url}/media/{url[len(prefix):]}"
-
-
-def _post_is_due(post: Post, now: datetime) -> bool:
-    if not post.published_at:
-        return True
-    scheduled_at = datetime.fromisoformat(post.published_at)
-    if scheduled_at.tzinfo is None:
-        scheduled_at = scheduled_at.replace(tzinfo=EST)
-    return scheduled_at <= now.astimezone(scheduled_at.tzinfo)
 
 
 def _validate_engagement_output(output: dict[str, Any]) -> None:

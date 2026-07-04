@@ -346,6 +346,28 @@ def _log_action(conn, action: str, job_id: str) -> None:
         pass  # never let logging break the worker
 
 
+def run_queue_tick() -> None:
+    """Publish the head of each platform's queue if its 24h cooldown elapsed.
+    Own connection so it's independent of the job-queue drain."""
+    from app.config import load_settings
+    from app.db.pg_connection import connect_postgres
+    from app.pipelines.publish_pipeline import process_queue_tick
+
+    conn = connect_postgres("")
+    try:
+        result = process_queue_tick(conn, settings=load_settings())
+        for post in result.published:
+            log.info("queue autopost published %s (%s)", post.id[:16], post.platform)
+            _log_action(conn, f"queue_autopost_done:{post.platform}", post.id)
+        for post in result.failed:
+            log.warning("queue autopost failed %s (%s)", post.id[:16], post.platform)
+            _log_action(conn, f"queue_autopost_failed:{post.platform}", post.id)
+    except Exception:  # noqa: BLE001
+        log.exception("queue tick error")
+    finally:
+        conn.close()
+
+
 def process_once() -> int:
     from app.db.jobs import claim_next_job, finish_job
     from app.db.pg_connection import connect_postgres
@@ -387,13 +409,19 @@ def main() -> None:
     if not args.loop:
         n = process_once()
         log.info("processed %d job(s)", n)
+        run_queue_tick()
         return
     log.info("worker loop started (interval=%ss)", args.interval)
+    queue_tick_seconds = 60  # check the publish cooldown at most once a minute
+    last_queue_tick = 0.0
     while True:
         try:
             process_once()
         except Exception:  # noqa: BLE001
             log.exception("poll error")
+        if time.time() - last_queue_tick >= queue_tick_seconds:
+            run_queue_tick()
+            last_queue_tick = time.time()
         time.sleep(args.interval)
 
 

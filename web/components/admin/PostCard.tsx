@@ -4,26 +4,14 @@ import { useState, useTransition } from "react"
 import type { AdminPost } from "@/lib/admin"
 import {
   approvePost,
-  cancelSchedule,
   deletePost,
   editCaption,
+  postNow,
   retryPost,
-  schedulePostAt,
 } from "@/app/admin/(dashboard)/schedule/actions"
 import { useTasks } from "./TasksProvider"
 
-type Section = "needsApproval" | "scheduled" | "queue" | "failed"
-
-function fmtTime(iso: string | null): string {
-  if (!iso) return ""
-  return new Date(iso).toLocaleString(undefined, {
-    weekday: "short",
-    month: "short",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  })
-}
+type Section = "needsApproval" | "queue" | "failed"
 
 function PlatformBadge({ platform }: { platform: string }) {
   const label = platform === "tiktok" ? "TikTok" : platform === "pinterest" ? "Pinterest" : platform
@@ -34,14 +22,26 @@ function PlatformBadge({ platform }: { platform: string }) {
   )
 }
 
-export default function PostCard({ post, section }: { post: AdminPost; section: Section }) {
+export default function PostCard({
+  post,
+  section,
+  position,
+  isFirst,
+  isLast,
+  onMove,
+}: {
+  post: AdminPost
+  section: Section
+  position?: number
+  isFirst?: boolean
+  isLast?: boolean
+  onMove?: (dir: "up" | "down" | "top") => void
+}) {
   const { trackJob } = useTasks()
   const [slide, setSlide] = useState(0)
   const [menuOpen, setMenuOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [caption, setCaption] = useState(post.caption ?? "")
-  const [picking, setPicking] = useState(false)
-  const [when, setWhen] = useState("")
   const [pending, start] = useTransition()
 
   const slides = post.slides.length ? post.slides : [""]
@@ -52,19 +52,52 @@ export default function PostCard({ post, section }: { post: AdminPost; section: 
     start(() => void fn())
   }
 
+  // Actions that enqueue a worker job (Post now / Retry) — track in the Tasks panel.
+  const runJob = (label: string, fn: () => Promise<string>) => () => {
+    setMenuOpen(false)
+    start(async () => {
+      const jobId = await fn()
+      trackJob(jobId, label, post.caption ?? post.platform)
+    })
+  }
+
   return (
     <div className="overflow-hidden rounded-sm border border-line/70 bg-surface">
       {/* header */}
       <div className="flex items-center justify-between gap-2 px-3 pt-3">
         <div className="flex items-center gap-2">
           <PlatformBadge platform={post.platform} />
-          {section === "scheduled" && post.scheduled_for && (
-            <span className="text-[0.7rem] font-medium text-accent">
-              {fmtTime(post.scheduled_for)}
-            </span>
+          {section === "queue" && position != null && (
+            <span className="text-[0.7rem] font-medium text-accent">#{position}</span>
           )}
-          {section === "scheduled" && post.is_manual_schedule && (
-            <span className="text-[0.6rem] uppercase tracking-wider text-muted/60">pinned</span>
+          {section === "queue" && onMove && (
+            <span className="flex items-center gap-0.5">
+              <button
+                disabled={isFirst || pending}
+                onClick={() => onMove("up")}
+                className="px-1 text-sm leading-none text-muted hover:text-foreground disabled:opacity-25"
+                aria-label="move up"
+              >
+                ↑
+              </button>
+              <button
+                disabled={isLast || pending}
+                onClick={() => onMove("down")}
+                className="px-1 text-sm leading-none text-muted hover:text-foreground disabled:opacity-25"
+                aria-label="move down"
+              >
+                ↓
+              </button>
+              <button
+                disabled={isFirst || pending}
+                onClick={() => onMove("top")}
+                className="px-1 text-sm leading-none text-muted hover:text-foreground disabled:opacity-25"
+                aria-label="move to top"
+                title="move to top"
+              >
+                ⤒
+              </button>
+            </span>
           )}
         </div>
         <div className="relative">
@@ -83,17 +116,13 @@ export default function PostCard({ post, section }: { post: AdminPost; section: 
                   Approve
                 </button>
               )}
+              {section === "queue" && (
+                <button onClick={runJob("Post now", () => postNow(post.id))} className="block w-full px-3 py-2 text-left hover:bg-accent/10 hover:text-accent">
+                  Post now
+                </button>
+              )}
               {section === "failed" && (
-                <button
-                  onClick={() => {
-                    setMenuOpen(false)
-                    start(async () => {
-                      const jobId = await retryPost(post.id)
-                      trackJob(jobId, "Retry post", post.caption ?? post.platform)
-                    })
-                  }}
-                  className="block w-full px-3 py-2 text-left hover:bg-accent/10 hover:text-accent"
-                >
+                <button onClick={runJob("Retry post", () => retryPost(post.id))} className="block w-full px-3 py-2 text-left hover:bg-accent/10 hover:text-accent">
                   Retry
                 </button>
               )}
@@ -103,21 +132,8 @@ export default function PostCard({ post, section }: { post: AdminPost; section: 
               >
                 Edit caption
               </button>
-              {section !== "needsApproval" && (
-                <button
-                  onClick={() => { setMenuOpen(false); setPicking(true) }}
-                  className="block w-full px-3 py-2 text-left hover:bg-accent/10 hover:text-accent"
-                >
-                  Schedule now…
-                </button>
-              )}
-              {section === "scheduled" && (
-                <button onClick={run(() => cancelSchedule(post.id))} className="block w-full px-3 py-2 text-left hover:bg-accent/10 hover:text-accent">
-                  Cancel schedule
-                </button>
-              )}
               <button onClick={run(() => deletePost(post.id))} className="block w-full px-3 py-2 text-left text-red-600 hover:bg-red-50">
-                Delete
+                {section === "needsApproval" ? "Delete" : "Remove"}
               </button>
             </div>
           )}
@@ -188,27 +204,6 @@ export default function PostCard({ post, section }: { post: AdminPost; section: 
           <p className="mt-2 break-words rounded-sm bg-red-50 px-2 py-1.5 text-[0.7rem] text-red-600">
             {post.apiError}
           </p>
-        )}
-
-        {picking && (
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <input
-              type="datetime-local"
-              value={when}
-              onChange={(e) => setWhen(e.target.value)}
-              className="rounded-sm border border-line bg-background px-2 py-1 text-sm"
-            />
-            <button
-              disabled={!when}
-              onClick={run(async () => { await schedulePostAt(post.id, when); setPicking(false) })}
-              className="rounded-sm bg-accent px-3 py-1 text-xs uppercase tracking-wider text-surface disabled:opacity-40"
-            >
-              Pin
-            </button>
-            <button onClick={() => setPicking(false)} className="px-2 py-1 text-xs uppercase tracking-wider text-muted">
-              Cancel
-            </button>
-          </div>
         )}
       </div>
     </div>

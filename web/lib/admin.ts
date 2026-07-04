@@ -1,16 +1,16 @@
 import { createAdminClient } from "@/lib/supabase/admin"
 
-/** Set to true to enable automatic FIFO scheduling of the 3-day slot window. */
-const AUTO_SCHEDULE_ENABLED = false
+/** Hours between auto-posts per platform. Mirror of the worker's
+ *  POST_COOLDOWN_HOURS so the UI can show the same countdown. */
+const POST_COOLDOWN_HOURS = Number(process.env.POST_COOLDOWN_HOURS ?? 24) || 24
 
 export interface AdminPost {
   id: string
   platform: "tiktok" | "pinterest" | "local"
   status: string
   caption: string | null
-  scheduled_for: string | null
-  is_manual_schedule: boolean
   approved: boolean
+  queueOrder: string | null
   concept_id: string | null
   outfit_id: string | null
   conceptName: string | null
@@ -19,17 +19,18 @@ export interface AdminPost {
   apiError: string | null
 }
 
-export interface ScheduleData {
-  needsApproval: AdminPost[]
-  scheduled: AdminPost[]
-  queue: AdminPost[]
-  failed: AdminPost[]
+/** Per-platform cooldown state. `readyAt` is the ISO time the next auto-post
+ *  becomes eligible; null means it's ready now (posts on the next worker tick). */
+export interface Cooldown {
+  readyAt: string | null
 }
 
-const PINTEREST_SLOT_HOURS = [10, 12, 14, 16, 18]
-const TIKTOK_SLOT_HOURS = [12]
-const WINDOW_DAYS = 3
-const EST_OFFSET = "-04:00" // EDT (June)
+export interface ScheduleData {
+  needsApproval: AdminPost[]
+  queues: { tiktok: AdminPost[]; pinterest: AdminPost[] }
+  cooldowns: { tiktok: Cooldown; pinterest: Cooldown }
+  failed: AdminPost[]
+}
 
 function meta(row: Record<string, unknown>): Record<string, unknown> {
   try {
@@ -71,9 +72,8 @@ function toAdminPost(
     platform: row.platform as AdminPost["platform"],
     status: row.status as string,
     caption: (row.caption as string) ?? null,
-    scheduled_for: (row.scheduled_for as string) ?? null,
-    is_manual_schedule: Boolean(row.is_manual_schedule),
     approved: Boolean(row.approved),
+    queueOrder: (row.queue_order as string) ?? null,
     concept_id: (row.concept_id as string) ?? null,
     outfit_id: (row.outfit_id as string) ?? null,
     conceptName: conceptNames[(row.concept_id as string) ?? ""] ?? null,
@@ -106,68 +106,6 @@ async function loadLookups(sb: ReturnType<typeof createAdminClient>) {
   return { conceptNames, collageByOutfit }
 }
 
-/** Fill the rolling window of scheduled slots from the FIFO queue. */
-export async function reconcileSchedule(): Promise<void> {
-  if (!AUTO_SCHEDULE_ENABLED) return
-  const sb = createAdminClient()
-  const { data: scheduled } = await sb
-    .from("posts")
-    .select("platform, scheduled_for")
-    .eq("status", "scheduled")
-  const filled = new Set(
-    (scheduled ?? []).map((p) => `${p.platform}@${p.scheduled_for}`)
-  )
-
-  const now = new Date()
-  const updates: { id: string; scheduled_for: string }[] = []
-
-  const queues: Record<string, Record<string, unknown>[]> = {}
-  for (const platform of ["pinterest", "tiktok"]) {
-    const { data } = await sb
-      .from("posts")
-      .select("*")
-      .eq("platform", platform)
-      .eq("status", "draft")
-      .eq("approved", true)
-      .is("scheduled_for", null)
-      .order("queue_order", { ascending: true })
-    queues[platform] = (data ?? []) as Record<string, unknown>[]
-  }
-
-  for (let day = 0; day < WINDOW_DAYS; day++) {
-    const d = new Date(now)
-    d.setDate(d.getDate() + day)
-    const ymd = d.toISOString().slice(0, 10)
-    const plans: [string, number[]][] = [
-      ["pinterest", PINTEREST_SLOT_HOURS],
-      ["tiktok", TIKTOK_SLOT_HOURS],
-    ]
-    for (const [platform, hours] of plans) {
-      for (const h of hours) {
-        const slotISO = `${ymd}T${String(h).padStart(2, "0")}:00:00${EST_OFFSET}`
-        if (new Date(slotISO) <= now) continue
-        if (filled.has(`${platform}@${slotISO}`)) continue
-        const next = queues[platform].shift()
-        if (!next) continue
-        updates.push({ id: next.id as string, scheduled_for: slotISO })
-        filled.add(`${platform}@${slotISO}`)
-      }
-    }
-  }
-
-  for (const u of updates) {
-    await sb
-      .from("posts")
-      .update({
-        status: "scheduled",
-        scheduled_for: u.scheduled_for,
-        is_manual_schedule: false,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", u.id)
-  }
-}
-
 export interface AdminOutfitProduct {
   id: string
   name: string
@@ -196,7 +134,7 @@ export interface AdminOutfit {
   collageUrl: string | null
   createdAt: string
   posted: boolean
-  scheduled: boolean
+  queued: boolean
   onSite: boolean
   products: AdminOutfitProduct[]
   posts: AdminOutfitPost[]
@@ -297,7 +235,7 @@ export async function getOutfits(): Promise<AdminOutfit[]> {
       collageUrl,
       createdAt: row.created_at as string,
       posted: statuses.includes("published"),
-      scheduled: statuses.includes("scheduled"),
+      queued: (outfitPosts[id] ?? []).some((p) => p.status === "draft" && p.approved),
       onSite: ci.active && !!collageUrl && layoutLen > 0,
       products: productIds.map((pid) => productMap[pid]).filter(Boolean),
       posts: outfitPosts[id] ?? [],
@@ -437,26 +375,62 @@ export async function getActivity(limit = 100): Promise<ActivityEntry[]> {
   }))
 }
 
+/** Most recent publish attempt (success or failure) for a platform, mirroring
+ *  the worker's platform_last_attempt: max of published_at + the
+ *  last_publish_attempt_at metadata stamp across that platform's posts. */
+function lastAttemptForPlatform(
+  rows: Record<string, unknown>[],
+  platform: string
+): number | null {
+  let latest: number | null = null
+  for (const row of rows) {
+    if (row.platform !== platform) continue
+    const candidates = [
+      row.published_at as string | null,
+      meta(row).last_publish_attempt_at as string | undefined,
+    ]
+    for (const raw of candidates) {
+      if (!raw) continue
+      const t = Date.parse(raw)
+      if (!Number.isNaN(t) && (latest === null || t > latest)) latest = t
+    }
+  }
+  return latest
+}
+
+function cooldownFor(rows: Record<string, unknown>[], platform: string): Cooldown {
+  const last = lastAttemptForPlatform(rows, platform)
+  if (last === null) return { readyAt: null } // never posted → ready now
+  const readyMs = last + POST_COOLDOWN_HOURS * 3600_000
+  if (readyMs <= Date.now()) return { readyAt: null }
+  return { readyAt: new Date(readyMs).toISOString() }
+}
+
 export async function getScheduleData(): Promise<ScheduleData> {
   const sb = createAdminClient()
   const { conceptNames, collageByOutfit } = await loadLookups(sb)
-  const { data: rows } = await sb.from("posts").select("*")
-  const posts = (rows ?? []).map((r) =>
-    toAdminPost(r as Record<string, unknown>, conceptNames, collageByOutfit)
-  )
+  const { data: rawRows } = await sb.from("posts").select("*")
+  const rows = (rawRows ?? []) as Record<string, unknown>[]
+  const posts = rows.map((r) => toAdminPost(r, conceptNames, collageByOutfit))
 
-  const needsApproval = posts.filter(
-    (p) => p.status === "draft" && !p.approved
-  )
-  const scheduled = posts
-    .filter((p) => p.status === "scheduled")
-    .sort((a, b) => (a.scheduled_for ?? "").localeCompare(b.scheduled_for ?? ""))
-  const queue = posts
-    .filter((p) => p.status === "draft" && p.approved && !p.scheduled_for)
-    .sort((a, b) => a.id.localeCompare(b.id))
+  const needsApproval = posts.filter((p) => p.status === "draft" && !p.approved)
+  const queued = posts
+    .filter((p) => p.status === "draft" && p.approved)
+    .sort((a, b) => (a.queueOrder ?? "").localeCompare(b.queueOrder ?? ""))
   const failed = posts
     .filter((p) => p.status === "failed")
     .sort((a, b) => a.id.localeCompare(b.id))
 
-  return { needsApproval, scheduled, queue, failed }
+  return {
+    needsApproval,
+    queues: {
+      tiktok: queued.filter((p) => p.platform === "tiktok"),
+      pinterest: queued.filter((p) => p.platform === "pinterest"),
+    },
+    cooldowns: {
+      tiktok: cooldownFor(rows, "tiktok"),
+      pinterest: cooldownFor(rows, "pinterest"),
+    },
+    failed,
+  }
 }

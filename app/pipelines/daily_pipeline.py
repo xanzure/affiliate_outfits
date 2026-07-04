@@ -169,8 +169,8 @@ def run_daily_for_brief(
         )
         # NOTE: posts land as drafts (approved=False) — Needs Approval — and are
         # never auto-published here. Publishing only happens once a human
-        # approves + schedules them (or via the due-post cron, which also
-        # requires approved=True — see autopublish_due_posts).
+        # approves them into the queue, which the worker's cooldown tick then
+        # drains one-per-platform-per-24h (see process_queue_tick).
         scheduled_brief = mark_scheduled_concept_posted(conn, scheduled_brief)
 
     elapsed = time.time() - t0

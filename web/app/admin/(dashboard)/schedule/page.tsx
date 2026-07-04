@@ -1,11 +1,12 @@
-import { getScheduleData, reconcileSchedule, type AdminPost } from "@/lib/admin"
+import { getScheduleData, type AdminPost } from "@/lib/admin"
 import PostCard from "@/components/admin/PostCard"
+import QueueList from "@/components/admin/QueueList"
 
 export const dynamic = "force-dynamic"
 
-type Section = "needsApproval" | "scheduled" | "queue" | "failed"
+type GridSection = "needsApproval" | "failed"
 
-function Section({
+function GridSection({
   title,
   hint,
   posts,
@@ -14,7 +15,7 @@ function Section({
   title: string
   hint?: string
   posts: AdminPost[]
-  section: Section
+  section: GridSection
 }) {
   return (
     <section className="mb-12">
@@ -39,44 +40,50 @@ function Section({
 }
 
 export default async function SchedulePage() {
-  await reconcileSchedule()
-  const { needsApproval, scheduled, queue, failed } = await getScheduleData()
+  const { needsApproval, queues, cooldowns, failed } = await getScheduleData()
+  const queuedCount = queues.tiktok.length + queues.pinterest.length
 
   return (
     <div>
       <header className="mb-8">
         <h1 className="font-serif text-3xl text-foreground sm:text-4xl">Schedule</h1>
         <p className="mt-1 text-sm text-muted">
-          {scheduled.length} scheduled · {queue.length} queued · {needsApproval.length} awaiting approval
+          {needsApproval.length} awaiting approval · {queuedCount} queued
           {failed.length > 0 && ` · ${failed.length} failed`}
         </p>
       </header>
 
       {failed.length > 0 && (
-        <Section
+        <GridSection
           title="Failed"
           hint="publish attempt errored — fix the cause, then retry"
           posts={failed}
           section="failed"
         />
       )}
-      <Section
+
+      <GridSection
         title="Needs Approval"
         hint="approve to enter the queue"
         posts={needsApproval}
         section="needsApproval"
       />
-      <Section
-        title="Scheduled"
-        posts={scheduled}
-        section="scheduled"
-      />
-      <Section
-        title="Queue"
-        hint="FIFO — fills the next 3 days automatically"
-        posts={queue}
-        section="queue"
-      />
+
+      <section className="mb-12">
+        <div className="mb-4 flex items-baseline gap-3">
+          <h2 className="text-[0.7rem] font-medium tracking-[0.28em] uppercase text-foreground/70">
+            Queue
+          </h2>
+          <span className="text-[0.7rem] tracking-wider text-muted/60">{queuedCount}</span>
+          <span className="text-[0.7rem] text-muted/50">
+            FIFO — one auto-post per platform every 24h; drag with ↑↓, or Post now
+          </span>
+        </div>
+        <div className="grid grid-cols-1 gap-8 md:grid-cols-2">
+          <QueueList platform="tiktok" posts={queues.tiktok} cooldown={cooldowns.tiktok} />
+          <QueueList platform="pinterest" posts={queues.pinterest} cooldown={cooldowns.pinterest} />
+        </div>
+      </section>
     </div>
   )
 }
