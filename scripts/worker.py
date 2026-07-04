@@ -258,6 +258,50 @@ def _handle_reprocess_product(conn, payload: dict) -> dict:
     return {"reprocessed": len(prepared)}
 
 
+def _handle_generate_posts_for_outfit(conn, payload: dict) -> dict:
+    """Generate TikTok + Pinterest draft posts for an existing outfit that has
+    none (e.g. the originals were deleted). Reuses the exact engagement +
+    publish-record path the daily pipeline uses, then attempts to autopublish
+    the same way a freshly generated outfit would."""
+    from app.agents.engagement.agent import generate_engagement_with_llm
+    from app.config import load_settings
+    from app.db.collages import list_collages_for_outfit
+    from app.db.outfits import get_outfit
+    from app.db.products import get_product
+    from app.pipelines.daily_pipeline import _product_payload
+    from app.pipelines.publish_pipeline import autopublish_posts, create_local_publish_records
+
+    outfit_id = payload.get("outfit_id")
+    if not outfit_id:
+        return {"error": "outfit_id is required"}
+
+    settings = load_settings()
+    outfit = get_outfit(conn, outfit_id)
+    products = [get_product(conn, pid) for pid in outfit.product_ids]
+    collages = list_collages_for_outfit(conn, outfit_id)
+    if not collages:
+        return {"error": "outfit has no collage — regenerate the collage first"}
+    collage = collages[0]
+
+    brief = outfit.metadata.get("brief")
+    if not isinstance(brief, dict):
+        return {"error": "outfit is missing its original brief — can't regenerate captions"}
+
+    engagement_output = generate_engagement_with_llm(
+        brief, outfit.spec, [_product_payload(p) for p in products],
+    )
+    publish_result = create_local_publish_records(
+        conn,
+        concept_id=outfit.concept_id,
+        outfit=outfit,
+        products=products,
+        collage_path=collage.collage_url or collage.image_path,
+        engagement_output=engagement_output,
+    )
+    autopublish_posts(conn, publish_result.posts, settings=settings)
+    return {"post_ids": [p.id for p in publish_result.posts], "outfit_id": outfit_id}
+
+
 def _handle_retry_post(conn, payload: dict) -> dict:
     """Re-attempt a live platform post for a single post row (e.g. after a
     failed publish). Reuses the same autopublish path the daily pipeline uses,
@@ -290,6 +334,7 @@ HANDLERS = {
     "intake_product": _handle_intake_product,
     "reprocess_product": _handle_reprocess_product,
     "retry_post": _handle_retry_post,
+    "generate_posts_for_outfit": _handle_generate_posts_for_outfit,
 }
 
 

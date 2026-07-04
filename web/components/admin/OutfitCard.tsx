@@ -172,7 +172,9 @@ export default function OutfitCard({ outfit }: { outfit: AdminOutfit }) {
   const [confirmDelete, setConfirmDelete] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const enqueueAndPoll = (type: "regenerate_image" | "regenerate_collage") => () => {
+  const enqueueAndPoll = (
+    type: "regenerate_image" | "regenerate_collage" | "generate_posts_for_outfit"
+  ) => () => {
     setMsg(null)
     start(async () => {
       const jobId = await enqueueJob(type, { outfit_id: outfit.id })
@@ -262,7 +264,16 @@ export default function OutfitCard({ outfit }: { outfit: AdminOutfit }) {
             <div className="mt-5">
               <p className="mb-2 text-[0.65rem] tracking-[0.2em] uppercase text-muted">Posts</p>
               {outfit.posts.length === 0 ? (
-                <p className="text-xs text-muted/60">No posts linked to this outfit yet.</p>
+                <div>
+                  <p className="mb-2 text-xs text-muted/60">No posts linked to this outfit yet.</p>
+                  <button
+                    onClick={enqueueAndPoll("generate_posts_for_outfit")}
+                    disabled={pending}
+                    className="rounded-sm border border-line px-3 py-2 text-xs uppercase tracking-wider text-foreground hover:border-accent hover:text-accent disabled:opacity-40"
+                  >
+                    Generate posts
+                  </button>
+                </div>
               ) : (
                 <div className="space-y-2">
                   {outfit.posts.map((p) => (

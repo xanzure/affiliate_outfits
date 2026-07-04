@@ -11,7 +11,8 @@ export async function enqueueJob(
     | "link_check"
     | "intake_product"
     | "reprocess_product"
-    | "retry_post",
+    | "retry_post"
+    | "generate_posts_for_outfit",
   payload: Record<string, unknown> = {}
 ): Promise<string> {
   const sb = createAdminClient()
