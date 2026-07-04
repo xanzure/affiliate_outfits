@@ -2,10 +2,12 @@
 Pinterest OAuth helper — get an access token for the Pinterest API v5.
 
 Commands:
-  python scripts/pinterest_auth.py url            Print the auth URL to open in browser
-  python scripts/pinterest_auth.py exchange CODE  Exchange a code for access + refresh tokens
-  python scripts/pinterest_auth.py refresh        Refresh an expired access token
-  python scripts/pinterest_auth.py boards         List your boards (to find PINTEREST_BOARD_ID)
+  python scripts/pinterest_auth.py url                 Print the auth URL to open in browser
+  python scripts/pinterest_auth.py exchange CODE       Exchange a code for access + refresh tokens
+  python scripts/pinterest_auth.py refresh             Refresh an expired access token
+  python scripts/pinterest_auth.py boards              List your boards (to find PINTEREST_BOARD_ID)
+  python scripts/pinterest_auth.py create-board NAME   Create a board (needed once per env — sandbox
+                                                        boards are separate from production ones)
 
 Requires in .env:
   PINTEREST_CLIENT_ID
@@ -144,6 +146,31 @@ def cmd_boards() -> None:
         print(f"  {board['id']}  —  {board['name']}")
 
 
+def cmd_create_board(name: str) -> None:
+    access_token = os.environ.get("PINTEREST_ACCESS_TOKEN", "")
+    if not access_token:
+        print("Error: PINTEREST_ACCESS_TOKEN must be set in .env first")
+        sys.exit(1)
+    body = json.dumps({
+        "name": name,
+        "description": "Vance Archives outfit posts",
+        "privacy": "PUBLIC",
+    }).encode()
+    req = Request(
+        f"{API_BASE}/v5/boards",
+        data=body,
+        method="POST",
+        headers={
+            "Authorization": f"Bearer {access_token}",
+            "Content-Type": "application/json",
+        },
+    )
+    with urlopen(req) as resp:
+        data = json.loads(resp.read())
+    print(f"\nCreated board '{data['name']}'.\n")
+    print(f"PINTEREST_BOARD_ID={data['id']}")
+
+
 if __name__ == "__main__":
     cmd = sys.argv[1] if len(sys.argv) > 1 else "url"
     if cmd == "url":
@@ -157,5 +184,10 @@ if __name__ == "__main__":
         cmd_refresh()
     elif cmd == "boards":
         cmd_boards()
+    elif cmd == "create-board":
+        if len(sys.argv) < 3:
+            print("Usage: python scripts/pinterest_auth.py create-board <NAME>")
+            sys.exit(1)
+        cmd_create_board(sys.argv[2])
     else:
         print(__doc__)
