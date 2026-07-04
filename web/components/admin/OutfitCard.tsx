@@ -2,9 +2,17 @@
 
 import { useState, useTransition, useEffect, useRef } from "react"
 import { useRouter } from "next/navigation"
-import type { AdminOutfit } from "@/lib/admin"
+import type { AdminOutfit, AdminOutfitPost } from "@/lib/admin"
 import { enqueueJob, getJobStatus } from "@/app/admin/(dashboard)/job-actions"
 import { deleteOutfit } from "@/app/admin/(dashboard)/outfits/actions"
+import {
+  approvePost,
+  cancelSchedule,
+  deletePost,
+  retryPost,
+  schedulePostAt,
+} from "@/app/admin/(dashboard)/schedule/actions"
+import { useTasks } from "./TasksProvider"
 
 function Badge({ on, label }: { on: boolean; label: string }) {
   return (
@@ -22,6 +30,138 @@ function Badge({ on, label }: { on: boolean; label: string }) {
 function price(cents: number | null, currency: string): string {
   if (cents == null) return "—"
   return new Intl.NumberFormat("en-US", { style: "currency", currency }).format(cents / 100)
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  draft: "text-muted",
+  scheduled: "text-accent",
+  published: "text-green-600",
+  failed: "text-red-500",
+}
+
+/** One linked post (TikTok/Pinterest draft, scheduled, failed, or live) with the
+ *  same schedule/cancel/retry/delete actions available on the Schedule tab —
+ *  so an outfit can be scheduled, unscheduled, or retried without leaving here. */
+function PostRow({ post, onDone }: { post: AdminOutfitPost; onDone: () => void }) {
+  const { trackJob } = useTasks()
+  const [pending, start] = useTransition()
+  const [picking, setPicking] = useState(false)
+  const [when, setWhen] = useState("")
+  const [confirmRemove, setConfirmRemove] = useState(false)
+
+  const run = (fn: () => Promise<void>) => () => start(async () => { await fn(); onDone() })
+
+  return (
+    <div className="rounded-sm border border-line/60 bg-background p-2.5">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-[0.65rem] uppercase tracking-wider text-foreground/70">
+          {post.platform === "tiktok" ? "TikTok" : post.platform === "pinterest" ? "Pinterest" : post.platform}
+        </span>
+        <span className={`text-[0.65rem] uppercase tracking-wider ${STATUS_COLOR[post.status] ?? "text-muted"}`}>
+          {post.status === "scheduled" && post.scheduled_for
+            ? new Date(post.scheduled_for).toLocaleString(undefined, {
+                month: "short", day: "numeric", hour: "numeric", minute: "2-digit",
+              })
+            : post.status}
+        </span>
+      </div>
+
+      {post.status === "failed" && post.apiError && (
+        <p className="mt-1.5 break-words rounded-sm bg-red-50 px-2 py-1 text-[0.65rem] text-red-600">
+          {post.apiError}
+        </p>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-2">
+        {post.status === "draft" && !post.approved && (
+          <button
+            disabled={pending}
+            onClick={run(() => approvePost(post.id))}
+            className="text-[0.65rem] uppercase tracking-wider text-accent hover:underline disabled:opacity-40"
+          >
+            Approve
+          </button>
+        )}
+        {post.status === "draft" && post.approved && !picking && (
+          <button
+            onClick={() => setPicking(true)}
+            className="text-[0.65rem] uppercase tracking-wider text-accent hover:underline"
+          >
+            Schedule…
+          </button>
+        )}
+        {post.status === "scheduled" && (
+          <button
+            disabled={pending}
+            onClick={run(() => cancelSchedule(post.id))}
+            className="text-[0.65rem] uppercase tracking-wider text-muted hover:text-foreground disabled:opacity-40"
+          >
+            Cancel schedule
+          </button>
+        )}
+        {post.status === "failed" && (
+          <button
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const jobId = await retryPost(post.id)
+                trackJob(jobId, "Retry post", post.caption ?? post.platform)
+                onDone()
+              })
+            }
+            className="text-[0.65rem] uppercase tracking-wider text-accent hover:underline disabled:opacity-40"
+          >
+            Retry
+          </button>
+        )}
+        {post.status !== "published" && (
+          confirmRemove ? (
+            <>
+              <span className="text-[0.65rem] text-muted">Remove this post?</span>
+              <button
+                disabled={pending}
+                onClick={run(() => deletePost(post.id))}
+                className="text-[0.65rem] uppercase tracking-wider text-red-500 hover:text-red-600 disabled:opacity-40"
+              >
+                Confirm
+              </button>
+              <button onClick={() => setConfirmRemove(false)} className="text-[0.65rem] uppercase tracking-wider text-muted">
+                Cancel
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => setConfirmRemove(true)}
+              className="text-[0.65rem] uppercase tracking-wider text-muted hover:text-red-500"
+            >
+              Remove
+            </button>
+          )
+        )}
+      </div>
+
+      {picking && (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <input
+            type="datetime-local"
+            value={when}
+            onChange={(e) => setWhen(e.target.value)}
+            className="rounded-sm border border-line bg-surface px-2 py-1 text-xs"
+          />
+          <button
+            disabled={!when || pending}
+            onClick={run(async () => { await schedulePostAt(post.id, when); setPicking(false) })}
+            className="rounded-sm bg-accent px-2 py-1 text-[0.65rem] uppercase tracking-wider text-surface disabled:opacity-40"
+          >
+            Pin
+          </button>
+          <button onClick={() => setPicking(false)} className="text-[0.65rem] uppercase tracking-wider text-muted">
+            Cancel
+          </button>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export default function OutfitCard({ outfit }: { outfit: AdminOutfit }) {
@@ -118,6 +258,19 @@ export default function OutfitCard({ outfit }: { outfit: AdminOutfit }) {
                 </li>
               ))}
             </ul>
+
+            <div className="mt-5">
+              <p className="mb-2 text-[0.65rem] tracking-[0.2em] uppercase text-muted">Posts</p>
+              {outfit.posts.length === 0 ? (
+                <p className="text-xs text-muted/60">No posts linked to this outfit yet.</p>
+              ) : (
+                <div className="space-y-2">
+                  {outfit.posts.map((p) => (
+                    <PostRow key={p.id} post={p} onDone={() => router.refresh()} />
+                  ))}
+                </div>
+              )}
+            </div>
 
             <div className="mt-5 flex flex-wrap gap-2">
               <button

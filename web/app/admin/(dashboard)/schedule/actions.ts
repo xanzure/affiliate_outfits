@@ -29,6 +29,7 @@ export async function approvePost(id: string) {
     .eq("id", id)
   await logAction("approve", id)
   revalidatePath("/admin/schedule")
+  revalidatePath("/admin/outfits")
 }
 
 export async function schedulePostAt(id: string, scheduledFor: string) {
@@ -45,6 +46,7 @@ export async function schedulePostAt(id: string, scheduledFor: string) {
     .eq("id", id)
   await logAction("schedule", id, { scheduledFor })
   revalidatePath("/admin/schedule")
+  revalidatePath("/admin/outfits")
 }
 
 export async function cancelSchedule(id: string) {
@@ -61,6 +63,7 @@ export async function cancelSchedule(id: string) {
     .eq("id", id)
   await logAction("cancel_schedule", id)
   revalidatePath("/admin/schedule")
+  revalidatePath("/admin/outfits")
 }
 
 export async function editCaption(id: string, caption: string) {
@@ -71,6 +74,7 @@ export async function editCaption(id: string, caption: string) {
     .eq("id", id)
   await logAction("edit_caption", id)
   revalidatePath("/admin/schedule")
+  revalidatePath("/admin/outfits")
 }
 
 /** Re-attempt a live platform post for a failed post. Runs on the worker
@@ -91,4 +95,5 @@ export async function deletePost(id: string) {
   await sb.from("posts").delete().eq("id", id)
   await logAction("delete", id)
   revalidatePath("/admin/schedule")
+  revalidatePath("/admin/outfits")
 }

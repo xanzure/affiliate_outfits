@@ -179,6 +179,16 @@ export interface AdminOutfitProduct {
   affiliate_url: string | null
 }
 
+export interface AdminOutfitPost {
+  id: string
+  platform: string
+  status: string
+  scheduled_for: string | null
+  approved: boolean
+  caption: string | null
+  apiError: string | null
+}
+
 export interface AdminOutfit {
   id: string
   conceptName: string | null
@@ -189,6 +199,7 @@ export interface AdminOutfit {
   scheduled: boolean
   onSite: boolean
   products: AdminOutfitProduct[]
+  posts: AdminOutfitPost[]
 }
 
 export async function getOutfits(): Promise<AdminOutfit[]> {
@@ -197,7 +208,7 @@ export async function getOutfits(): Promise<AdminOutfit[]> {
     await Promise.all([
       sb.from("outfits").select("*").order("created_at", { ascending: false }),
       sb.from("collages").select("outfit_id, collage_url"),
-      sb.from("posts").select("outfit_id, status, metadata_json"),
+      sb.from("posts").select("id, outfit_id, platform, status, scheduled_for, approved, caption, metadata_json"),
       sb.from("concepts").select("id, seed, status, metadata_json"),
       sb.from("products").select("*"),
     ])
@@ -229,17 +240,35 @@ export async function getOutfits(): Promise<AdminOutfit[]> {
     }
   }
 
-  // posts grouped by outfit for status flags
+  // posts grouped by outfit — both for status flags and for direct actions
+  // (schedule / cancel / retry) from the Outfits page.
   const postsByOutfit: Record<string, string[]> = {}
+  const outfitPosts: Record<string, AdminOutfitPost[]> = {}
   for (const post of posts ?? []) {
     const oid = post.outfit_id as string
     if (!oid) continue
-    ;(postsByOutfit[oid] ??= []).push(post.status as string)
+    let apiError: string | null = null
+    try {
+      const m = JSON.parse((post.metadata_json as string) ?? "{}")
+      apiError = (m.api_error as string) ?? null
+    } catch {}
+    const entry: AdminOutfitPost = {
+      id: post.id as string,
+      platform: post.platform as string,
+      status: post.status as string,
+      scheduled_for: (post.scheduled_for as string) ?? null,
+      approved: Boolean(post.approved),
+      caption: (post.caption as string) ?? null,
+      apiError,
+    }
+    ;(postsByOutfit[oid] ??= []).push(entry.status)
+    ;(outfitPosts[oid] ??= []).push(entry)
     // slideshow posts reference multiple outfit_ids in metadata
     try {
       const m = JSON.parse((post.metadata_json as string) ?? "{}")
       for (const extra of (m.outfit_ids as string[] | undefined) ?? []) {
-        ;(postsByOutfit[extra] ??= []).push(post.status as string)
+        ;(postsByOutfit[extra] ??= []).push(entry.status)
+        ;(outfitPosts[extra] ??= []).push(entry)
       }
     } catch {}
   }
@@ -271,6 +300,7 @@ export async function getOutfits(): Promise<AdminOutfit[]> {
       scheduled: statuses.includes("scheduled"),
       onSite: ci.active && !!collageUrl && layoutLen > 0,
       products: productIds.map((pid) => productMap[pid]).filter(Boolean),
+      posts: outfitPosts[id] ?? [],
     }
   })
 }
