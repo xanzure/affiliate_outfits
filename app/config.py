@@ -76,6 +76,7 @@ class Settings:
     pinterest_refresh_token: str | None = None
     pinterest_board_id: str | None = None
     supabase_db_url: str | None = None
+    supabase_url: str | None = None
 
     @property
     def is_development(self) -> bool:
@@ -131,4 +132,5 @@ def load_settings(env_file: Path | None = None) -> Settings:
         pinterest_refresh_token=read("PINTEREST_REFRESH_TOKEN", "") or None,
         pinterest_board_id=read("PINTEREST_BOARD_ID", "") or None,
         supabase_db_url=read("SUPABASE_DB_URL", "") or None,
+        supabase_url=read("SUPABASE_URL", "").rstrip("/") or None,
     )

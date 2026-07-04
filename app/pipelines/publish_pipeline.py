@@ -313,10 +313,25 @@ def _publish_pinterest_post(
 
 def _public_asset_url(path: str, *, settings: Settings) -> str:
     if path.startswith(("http://", "https://")):
-        return path
+        return _proxied_storage_url(path, settings=settings)
     if not settings.public_asset_base_url:
         raise ValueError("PUBLIC_ASSET_BASE_URL is required for autoposting local assets")
     return f"{settings.public_asset_base_url}/{path.lstrip('/')}"
+
+
+def _proxied_storage_url(url: str, *, settings: Settings) -> str:
+    """Rewrite a raw Supabase Storage public URL to our own domain via the
+    web app's /media/ rewrite (see web/next.config.ts), so third parties we
+    hand this URL to (e.g. TikTok's Content Posting API, which requires proof
+    of ownership of any URL it pulls media from) see vancearchives.com
+    instead of the shared *.supabase.co host, which we can't prove ownership
+    of. Falls back to the raw URL if either base isn't configured."""
+    if not settings.supabase_url or not settings.public_asset_base_url:
+        return url
+    prefix = f"{settings.supabase_url}/storage/v1/object/public/"
+    if not url.startswith(prefix):
+        return url
+    return f"{settings.public_asset_base_url}/media/{url[len(prefix):]}"
 
 
 def _post_is_due(post: Post, now: datetime) -> bool:
