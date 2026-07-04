@@ -16,11 +16,12 @@ from app.services.llm_service import ClaudeJSONService, LLMPrompt
 
 log = logging.getLogger(__name__)
 
-# Opus 4.8 leads on creative taste/range (what makes a broad concept diverse);
-# low effort keeps deliberation + cost down — the facet system supplies structural
-# diversity, so we don't need to pay for high effort.
-_CURATOR_MODEL = "claude-opus-4-8"
-_CURATOR_EFFORT = "low"
+# Sonnet 5 — near-Opus creative taste at ~40% of the cost. NOTE: temperature is
+# NOT accepted on Sonnet 5 (400s, like Opus 4.7/4.8), so "creative variance" comes
+# from the facet system (structural diversity) + effort, not a sampling knob.
+# medium effort ≈ Sonnet 4.6 at high; a good quality/cost balance for curation.
+_CURATOR_MODEL = "claude-sonnet-5"
+_CURATOR_EFFORT = "medium"
 
 _STORE_KNOWLEDGE = (
     Path(__file__).parent / "store_knowledge.md"
