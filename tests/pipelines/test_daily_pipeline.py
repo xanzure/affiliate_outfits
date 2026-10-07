@@ -2,6 +2,18 @@ import tempfile
 import unittest
 from pathlib import Path
 
+from app.config import load_settings
+
+# These two exercise the full pipeline including the real Claude LLM service, so
+# they need a live ANTHROPIC_API_KEY (and make paid calls). The key is resolved
+# the same way the app resolves it (env var or .env), so they still run locally
+# where .env is present, and auto-skip on a bare CI runner (no key). The other
+# 71 tests are hermetic — local sqlite temp DBs, no network.
+_NEEDS_LLM = unittest.skipUnless(
+    bool(load_settings().anthropic_api_key),
+    "live: needs ANTHROPIC_API_KEY (real LLM path)",
+)
+
 from app.config import Settings
 from app.db.collages import list_collages_for_outfit
 from app.db.concepts import get_concept
@@ -80,6 +92,7 @@ BATCH_ENGAGEMENT_OUTPUT = {
 
 
 class DailyPipelineTests(unittest.TestCase):
+    @_NEEDS_LLM
     def test_run_daily_for_brief_creates_local_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
@@ -177,6 +190,7 @@ class DailyPipelineTests(unittest.TestCase):
             finally:
                 conn.close()
 
+    @_NEEDS_LLM
     def test_run_daily_outfit_set_for_concept_creates_five_outfits_and_six_posts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)

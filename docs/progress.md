@@ -221,6 +221,22 @@ to the merchant page directly (no affiliate tracking until AWIN feeds are live).
 | AWIN catalog | SQLite FTS5 | Postgres full-text | Local dev: FTS5 is simpler and faster for text search on feed data |
 | Auth | Supabase magic-link + allowlist | NextAuth / Clerk | Already using Supabase; magic-link = no password to manage |
 | Long-term language | TypeScript (future) | Python (current) | Pipeline is API calls, not local ML; unified codebase eliminates worker |
+| DB access layer | REST RPC bridge (`_rpc_query`/`_rpc_exec`) | Direct pooled Postgres | Reused the sqlite-shaped API over Supabase REST; **tradeoff: SECURITY DEFINER arbitrary-SQL functions are a security smell — replace with a real PG connection** |
+| Row security | RLS on + anon SELECT on 3 public tables only | RLS off (initial) | Initial state left RLS off → public anon key had full DB write + arbitrary SQL; fixed 2026-10-07 (see below) |
+
+### Security hardening (2026-10-07)
+
+An audit found the initial Supabase setup shipped with **RLS disabled on every
+table** and the public `anon` role (whose key ships in the browser bundle) granted
+full write access *and* EXECUTE on the `SECURITY DEFINER` `_rpc_query`/`_rpc_exec`
+SQL bridge — a remotely exploitable total-DB compromise (arbitrary SQL / `TRUNCATE`
+by anyone). Fixed with an idempotent hardening block at the end of
+`app/db/schema_postgres.sql`: revoke the RPC bridge and all writes/non-public reads
+from the public roles, enable RLS everywhere, add anon SELECT-only policies for the
+three tables the public site reads (`concepts`/`outfits`/`products`), and lock down
+default privileges so future tables aren't auto-exposed. Lesson: Supabase's public
+anon key makes RLS load-bearing by default; "RLS off" is a live vulnerability, not a
+dev convenience.
 
 ---
 

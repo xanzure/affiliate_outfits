@@ -137,3 +137,66 @@ CREATE TABLE IF NOT EXISTS metrics (
 
 CREATE INDEX IF NOT EXISTS idx_metrics_post_id ON metrics(post_id);
 CREATE INDEX IF NOT EXISTS idx_metrics_collected_at ON metrics(collected_at);
+
+-- ============================================================================
+-- Security hardening (2026-10-07). An audit found the PUBLIC anon key (shipped
+-- in the browser bundle) had full SELECT/INSERT/UPDATE/DELETE/TRUNCATE on every
+-- table AND EXECUTE on the SECURITY DEFINER `_rpc_query` / `_rpc_exec` bridge —
+-- i.e. anyone on the internet could run arbitrary SQL / wipe the database.
+--
+-- Access model after this block:
+--   * service_role (worker + dashboard, server-only) — full access, bypasses RLS.
+--   * anon (public site, web/lib/data.ts) — SELECT only on concepts/outfits/products.
+--   * everything else — unreachable by the public.
+--
+-- Idempotent: safe to re-run (this whole file can be pasted into the Supabase
+-- SQL editor, which runs as the table owner, to apply to an existing database).
+-- ============================================================================
+
+-- 1. Revoke the arbitrary-SQL RPC bridge from every non-privileged role.
+--    (These are SECURITY DEFINER, so public EXECUTE = remote arbitrary SQL.)
+DO $$
+DECLARE r record;
+BEGIN
+    FOR r IN SELECT oid::regprocedure AS sig FROM pg_proc
+             WHERE proname IN ('_rpc_query', '_rpc_exec')
+    LOOP
+        EXECUTE format('REVOKE EXECUTE ON FUNCTION %s FROM PUBLIC, anon, authenticated', r.sig);
+    END LOOP;
+END $$;
+
+-- 2. Revoke all write privileges from the public roles. TRUNCATE is NOT gated by
+--    RLS, so revoking the grant is required, not merely defense-in-depth.
+REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+    ON ALL TABLES IN SCHEMA public FROM anon, authenticated;
+
+-- 3. Revoke read on everything the public site does not need.
+REVOKE SELECT ON posts, collages, jobs, metrics, admin_actions
+    FROM anon, authenticated;
+
+-- 4. Enable row-level security on every table (service_role bypasses RLS).
+ALTER TABLE concepts      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE products      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE outfits       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE collages      ENABLE ROW LEVEL SECURITY;
+ALTER TABLE posts         ENABLE ROW LEVEL SECURITY;
+ALTER TABLE jobs          ENABLE ROW LEVEL SECURITY;
+ALTER TABLE metrics       ENABLE ROW LEVEL SECURITY;
+ALTER TABLE admin_actions ENABLE ROW LEVEL SECURITY;
+
+-- 5. Read-only policies for the three tables the public gallery reads
+--    (web/lib/data.ts). No write policy exists, so these are read-only even
+--    before the grant revokes above.
+DROP POLICY IF EXISTS anon_read_concepts ON concepts;
+CREATE POLICY anon_read_concepts ON concepts FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS anon_read_outfits ON outfits;
+CREATE POLICY anon_read_outfits  ON outfits  FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS anon_read_products ON products;
+CREATE POLICY anon_read_products ON products FOR SELECT TO anon, authenticated USING (true);
+
+-- 6. Stop FUTURE tables/functions from being auto-granted to the public roles.
+--    Without this, Supabase's default privileges re-open the hole on the next
+--    migration. (Applies to objects created by the role running this block —
+--    the table owner — which is how the app creates schema objects.)
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM anon, authenticated;
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON FUNCTIONS FROM PUBLIC, anon, authenticated;

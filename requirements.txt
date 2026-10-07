@@ -1,5 +1,5 @@
 anthropic>=0.69
-Pillow>=10.0
+Pillow>=12.3.0           # security: PYSEC-2026-3493..3496,3454 (image parsing)
 httpx>=0.27
 supabase>=2.0
 rembg[cpu]>=2.0.67
@@ -10,3 +10,9 @@ pydantic>=2.0
 python-dateutil>=2.8
 tqdm>=4.65
 playwright>=1.60
+
+# Security minimums for transitive deps flagged by pip-audit (pulled in via
+# supabase / requests). Pinned explicitly so the resolver can't pick a known-
+# vulnerable version in CI or a fresh install.
+urllib3>=2.8.0          # PYSEC-2026-4175..4177
+PyJWT>=2.15.0           # PYSEC-2026-4140..4183 (JWT parsing)

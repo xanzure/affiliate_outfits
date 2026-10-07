@@ -140,7 +140,7 @@ class EngagementPublishTests(unittest.TestCase):
             finally:
                 conn.close()
 
-    def test_create_local_publish_records_for_outfit_set_creates_slideshow_and_scheduled_pins(self) -> None:
+    def test_create_local_publish_records_for_outfit_set_creates_slideshow_and_draft_pins(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             database_path = Path(temp_dir) / "publish.sqlite3"
             initialize_database(database_path)
@@ -185,7 +185,6 @@ class EngagementPublishTests(unittest.TestCase):
                     products_by_outfit=[[product] for _ in outfits],
                     collage_paths=[Path(f"data/images/collages/look-{index}.png") for index in range(1, 6)],
                     engagement_output=engagement,
-                    schedule_date_est="2026-06-14",
                 )
                 conn.commit()
 
@@ -196,17 +195,11 @@ class EngagementPublishTests(unittest.TestCase):
                 self.assertEqual(len(pinterest_posts), 5)
                 self.assertEqual(tiktok_posts[0].metadata["post_format"], "slideshow")
                 self.assertEqual(len(tiktok_posts[0].metadata["outfit_ids"]), 5)
-                self.assertTrue(all(post.status == "scheduled" for post in pinterest_posts))
-                self.assertEqual(
-                    [post.published_at for post in pinterest_posts],
-                    [
-                        "2026-06-14T10:00-05:00",
-                        "2026-06-14T12:00-05:00",
-                        "2026-06-14T14:00-05:00",
-                        "2026-06-14T16:00-05:00",
-                        "2026-06-14T18:00-05:00",
-                    ],
-                )
+                # New model: batch posts land as Needs-Approval drafts, not
+                # pre-scheduled pins (no scheduled status / specific times).
+                self.assertTrue(all(post.status == "draft" for post in result.posts))
+                self.assertTrue(all(not post.approved for post in result.posts))
+                self.assertTrue(all(post.published_at is None for post in pinterest_posts))
             finally:
                 conn.close()
 
@@ -229,7 +222,7 @@ class EngagementPublishTests(unittest.TestCase):
             finally:
                 conn.close()
 
-    def test_autopublish_posts_publishes_due_posts_and_skips_future_posts(self) -> None:
+    def test_autopublish_posts_publishes_all_given_posts(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             root = Path(temp_dir)
             database_path = root / "publish.sqlite3"
@@ -285,11 +278,13 @@ class EngagementPublishTests(unittest.TestCase):
                     products_by_outfit=[[product] for _ in outfits],
                     collage_paths=[Path(f"data/images/collages/look-{index}.png") for index in range(1, 6)],
                     engagement_output=engagement,
-                    schedule_date_est="2026-06-14",
                 )
 
                 tiktok_client = FakeTikTokClient()
                 pinterest_client = FakePinterestClient()
+                # New model: autopublish_posts attempts every non-published post it
+                # is handed (the per-platform 24h cooldown lives in
+                # process_queue_tick, not here). So all 6 publish.
                 result = autopublish_posts(
                     conn,
                     local.posts,
@@ -300,12 +295,12 @@ class EngagementPublishTests(unittest.TestCase):
                 )
                 conn.commit()
 
-                self.assertEqual(len(result.published), 3)
+                self.assertEqual(len(result.published), 6)
                 self.assertEqual(len(result.failed), 0)
-                self.assertEqual(len(result.skipped), 3)
+                self.assertEqual(len(result.skipped), 0)
                 self.assertEqual(len(tiktok_client.requests), 1)
                 self.assertEqual(len(tiktok_client.requests[0]["image_urls"]), 5)
-                self.assertEqual(len(pinterest_client.requests), 2)
+                self.assertEqual(len(pinterest_client.requests), 5)
                 self.assertEqual(
                     pinterest_client.requests[0]["image_url"],
                     "https://cdn.example.test/assets/data/images/collages/look-1.png",
@@ -313,7 +308,7 @@ class EngagementPublishTests(unittest.TestCase):
                 self.assertEqual(pinterest_client.requests[0]["link"], "https://example.test/sunglasses")
 
                 stored = list_posts(conn, status="published")
-                self.assertEqual(len(stored), 3)
+                self.assertEqual(len(stored), 6)
                 self.assertTrue(all(post.platform_post_id for post in stored))
             finally:
                 conn.close()
