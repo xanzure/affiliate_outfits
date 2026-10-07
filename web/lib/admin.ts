@@ -183,13 +183,17 @@ export async function getOutfits(): Promise<AdminOutfit[]> {
   const postsByOutfit: Record<string, string[]> = {}
   const outfitPosts: Record<string, AdminOutfitPost[]> = {}
   for (const post of posts ?? []) {
-    const oid = post.outfit_id as string
-    if (!oid) continue
-    let apiError: string | null = null
+    let m: Record<string, unknown> = {}
     try {
-      const m = JSON.parse((post.metadata_json as string) ?? "{}")
-      apiError = (m.api_error as string) ?? null
+      m = JSON.parse((post.metadata_json as string) ?? "{}")
     } catch {}
+    // A slideshow post covers every outfit in metadata.outfit_ids, and its
+    // outfit_id is also outfit_ids[0] — dedupe so it's listed once per outfit.
+    const linked = new Set<string>(
+      [post.outfit_id as string, ...((m.outfit_ids as string[] | undefined) ?? [])].filter(Boolean)
+    )
+    if (!linked.size) continue
+    const apiError = (m.api_error as string) ?? null
     const entry: AdminOutfitPost = {
       id: post.id as string,
       platform: post.platform as string,
@@ -199,16 +203,10 @@ export async function getOutfits(): Promise<AdminOutfit[]> {
       caption: (post.caption as string) ?? null,
       apiError,
     }
-    ;(postsByOutfit[oid] ??= []).push(entry.status)
-    ;(outfitPosts[oid] ??= []).push(entry)
-    // slideshow posts reference multiple outfit_ids in metadata
-    try {
-      const m = JSON.parse((post.metadata_json as string) ?? "{}")
-      for (const extra of (m.outfit_ids as string[] | undefined) ?? []) {
-        ;(postsByOutfit[extra] ??= []).push(entry.status)
-        ;(outfitPosts[extra] ??= []).push(entry)
-      }
-    } catch {}
+    for (const oid of linked) {
+      ;(postsByOutfit[oid] ??= []).push(entry.status)
+      ;(outfitPosts[oid] ??= []).push(entry)
+    }
   }
 
   return (outfits ?? []).map((row) => {
