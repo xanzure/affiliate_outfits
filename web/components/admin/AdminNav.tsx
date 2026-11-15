@@ -52,7 +52,7 @@ export default function AdminNav({
 
       {/* Desktop: left sidebar */}
       <aside className="hidden w-56 shrink-0 flex-col border-r border-line/70 bg-surface/60 p-5 md:flex">
-        <img src="/logo_cropped.png" alt="Vance Archives" className="mb-8 h-8 w-auto" />
+        <img src="/logo_cropped.png" alt="Vance Archives" className="mb-8 h-10 w-auto self-start object-contain" />
         <nav className="flex flex-col gap-1">
           {TABS.map((t) => (
             <Link
