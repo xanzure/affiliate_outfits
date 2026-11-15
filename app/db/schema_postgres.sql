@@ -139,6 +139,41 @@ CREATE INDEX IF NOT EXISTS idx_metrics_post_id ON metrics(post_id);
 CREATE INDEX IF NOT EXISTS idx_metrics_collected_at ON metrics(collected_at);
 
 -- ============================================================================
+-- SQL bridge used by app/db/pg_connection.py (the sqlite3-shaped client).
+-- The Python data layer sends parameter-substituted SQL through Supabase's REST
+-- RPC endpoint: SELECT/WITH go to _rpc_query (rows as a JSON array), everything
+-- else to _rpc_exec. SECURITY DEFINER so they run as the owner; EXECUTE is
+-- restricted to service_role by the hardening block below — without that
+-- block these functions are a remote arbitrary-SQL hole. search_path is pinned
+-- so a caller can't shadow objects in public.
+-- ============================================================================
+
+CREATE OR REPLACE FUNCTION public._rpc_query(sql text)
+ RETURNS json
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public, pg_temp
+AS $function$
+DECLARE result json;
+BEGIN
+  EXECUTE 'SELECT COALESCE(json_agg(t),''[]''::json) FROM (' || sql || ') t' INTO result;
+  RETURN result;
+END;
+$function$;
+
+CREATE OR REPLACE FUNCTION public._rpc_exec(sql text)
+ RETURNS integer
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path = public, pg_temp
+AS $function$
+BEGIN
+  EXECUTE sql;
+  RETURN 1;
+END;
+$function$;
+
+-- ============================================================================
 -- Security hardening (2026-10-07). An audit found the PUBLIC anon key (shipped
 -- in the browser bundle) had full SELECT/INSERT/UPDATE/DELETE/TRUNCATE on every
 -- table AND EXECUTE on the SECURITY DEFINER `_rpc_query` / `_rpc_exec` bridge —
