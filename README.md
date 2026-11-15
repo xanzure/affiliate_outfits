@@ -139,3 +139,7 @@ Everything is configuration. Copy `.env.example` → `.env` and
 | [Creative briefs](docs/creative_briefs.md) · [Concept scoring](docs/concept_scoring.md) · [Terminology](docs/terminology.md) | The content model |
 | [Agent prompts](docs/agent_prompts.md) · [LLM agents](docs/ai_agents.md) · [Image service](docs/image_service.md) · [Stage contracts](docs/api.md) | Component detail |
 | [Roadmap](docs/roadmap.md) | What would come next if revived |
+
+## License
+
+[MIT](LICENSE).
