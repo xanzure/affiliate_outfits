@@ -34,6 +34,7 @@ export interface ProductLayout {
   x: number       // percent from left edge of canvas
   y: number       // percent from top edge of canvas
   width: number   // percent of canvas width
+  height?: number // percent of canvas height (box the renderer fit the image into)
   rotation: number
   z_index: number
 }
@@ -57,6 +58,7 @@ export interface Outfit {
   collage_url: string | null
   spec: {
     layout: ProductLayout[]
+    collage_url?: string // the rendered collage this layout belongs to
     [key: string]: unknown
   }
   created_at: string

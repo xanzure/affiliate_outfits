@@ -146,7 +146,7 @@ def _handle_regenerate_collage(conn, payload: dict) -> dict:
         )
     update_outfit_spec(
         conn, outfit_id,
-        _spec_with_website_layout(outfit.spec, {"canvas": manifest["canvas"], "pieces": manifest["pieces"]}),
+        _spec_with_website_layout(outfit.spec, {"canvas": manifest["canvas"], "pieces": manifest["pieces"]}, url),
     )
     return {"collage_url": url}
 

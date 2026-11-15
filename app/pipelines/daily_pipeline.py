@@ -150,7 +150,7 @@ def run_daily_for_brief(
     outfit = update_outfit_spec(
         conn,
         outfit.id,
-        _spec_with_website_layout(outfit.spec, collage.layout),
+        _spec_with_website_layout(outfit.spec, collage.layout, collage.collage_url),
     )
     publish_result = None
     if create_publish_records:
@@ -340,7 +340,7 @@ def _materialize_outfit_output(
     outfit = update_outfit_spec(
         conn,
         outfit.id,
-        _spec_with_website_layout(outfit.spec, collage.layout),
+        _spec_with_website_layout(outfit.spec, collage.layout, collage.collage_url),
     )
     return DailyOutfitResult(
         outfit=outfit,
@@ -378,9 +378,22 @@ def _collage_manifest_with_products(manifest: dict[str, Any], products: list[Pro
     return manifest
 
 
-def _spec_with_website_layout(spec: dict[str, Any], collage_layout: dict[str, Any]) -> dict[str, Any]:
+def _spec_with_website_layout(
+    spec: dict[str, Any],
+    collage_layout: dict[str, Any],
+    collage_url: str | None = None,
+) -> dict[str, Any]:
+    """Write the website's view of the collage into the outfit spec: per-product
+    boxes (percent of the full canvas) and the rendered image's public URL. The
+    site draws the real collage and overlays clickable boxes, so the URL must
+    belong to this exact layout — without a public URL the key is dropped and the
+    site falls back to rebuilding the collage from cutouts."""
     updated = dict(spec)
     updated["layout"] = _website_product_layout(collage_layout)
+    if collage_url and collage_url.startswith(("http://", "https://")):
+        updated["collage_url"] = collage_url
+    else:
+        updated.pop("collage_url", None)
     return updated
 
 
@@ -394,16 +407,19 @@ def _website_product_layout(collage_layout: dict[str, Any]) -> list[dict[str, An
         product_id = piece.get("product_id")
         if not isinstance(product_id, str) or not product_id:
             continue
-        layout.append(
-            {
-                "product_id": product_id,
-                "x": round(float(piece["x"]) / canvas_width * 100, 4),
-                "y": round(float(piece["y"]) / canvas_height * 100, 4),
-                "width": round(float(piece["width"]) / canvas_width * 100, 4),
-                "rotation": float(piece.get("rotation", 0)),
-                "z_index": int(piece.get("z_index", index + 1)),
-            }
-        )
+        item = {
+            "product_id": product_id,
+            "x": round(float(piece["x"]) / canvas_width * 100, 4),
+            "y": round(float(piece["y"]) / canvas_height * 100, 4),
+            "width": round(float(piece["width"]) / canvas_width * 100, 4),
+            "rotation": float(piece.get("rotation", 0)),
+            "z_index": int(piece.get("z_index", index + 1)),
+        }
+        # The renderer fits each image inside a fixed box; without the box height
+        # the site can't reproduce the composition.
+        if isinstance(piece.get("height"), (int, float)) and piece["height"] > 0:
+            item["height"] = round(float(piece["height"]) / canvas_height * 100, 4)
+        layout.append(item)
     return layout
 
 
