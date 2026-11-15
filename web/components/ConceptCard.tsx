@@ -20,13 +20,17 @@ export default function ConceptCard({ concept, outfitCount, index }: Props) {
   const displayName = concept.metadata.display_name as string | undefined
   const label = displayName ?? concept.seed
   const colorClass = PLACEHOLDER_COLORS[index % PLACEHOLDER_COLORS.length]
+  // Only a real URL is a usable cover — anything else (e.g. a pipeline-local
+  // file path) would render as a broken image, so use the placeholder instead.
+  const cover = concept.metadata.cover_image_url
+  const coverUrl = typeof cover === "string" && /^https?:\/\//.test(cover) ? cover : null
 
   return (
     <Link href={`/concept/${concept.id}`} className="group block">
       <div className="relative aspect-[3/4] w-full overflow-hidden rounded-sm bg-canvas ring-1 ring-line/60 transition-all duration-500 group-hover:ring-accent/40 group-hover:shadow-[0_18px_42px_-18px_rgba(60,45,30,0.45)]">
-        {concept.metadata.cover_image_url ? (
+        {coverUrl ? (
           <img
-            src={concept.metadata.cover_image_url as string}
+            src={coverUrl}
             alt={label}
             className="h-full w-full object-cover transition-transform duration-700 ease-out group-hover:scale-[1.06]"
           />

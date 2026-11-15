@@ -230,10 +230,11 @@ def run_daily_outfit_set_for_concept(
         )
 
     if outfit_results:
+        first = outfit_results[0]
         _set_concept_cover_image_if_missing(
             conn,
             scheduled_concept.concept_id,
-            str(outfit_results[0].collage_path),
+            first.collage_url or str(first.collage_path),
         )
 
     publish_result = None
@@ -417,12 +418,20 @@ def _set_concept_cover_image_if_missing(
     concept_id: str,
     cover_image_url: str,
 ) -> None:
+    """Set the concept's cover, preferring a public URL. A stored local path (from
+    a run where the upload was unavailable) is not a usable cover, so a later run
+    with a real URL replaces it."""
     concept = get_concept(conn, concept_id)
     metadata = dict(concept.metadata)
-    if metadata.get("cover_image_url"):
+    existing = metadata.get("cover_image_url")
+    if existing and (_is_public_url(existing) or not _is_public_url(cover_image_url)):
         return
     metadata["cover_image_url"] = cover_image_url
     update_concept_metadata(conn, concept_id, metadata)
+
+
+def _is_public_url(value: object) -> bool:
+    return isinstance(value, str) and value.startswith(("http://", "https://"))
 
 
 def _concept_history(conn: sqlite3.Connection, concept_id: str | None) -> list[dict[str, Any]]:
