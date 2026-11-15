@@ -2,7 +2,7 @@
 """
 Manual outfit ingestion from curated product URLs.
 
-Input file format (outfits.txt):
+Input file format (see data/sample_outfits.txt):
 ──────────────────────────────────────────────────
 CONCEPT: Bad Bunny Concert
 
@@ -17,8 +17,8 @@ https://...
 ──────────────────────────────────────────────────
 
 Usage:
-    python ingest_outfits.py outfits.txt
-    python ingest_outfits.py outfits.txt --dry-run   # scrape only, no DB writes
+    python scripts/ingest_outfits.py data/sample_outfits.txt
+    python scripts/ingest_outfits.py data/sample_outfits.txt --dry-run   # scrape only, no DB writes
 """
 from __future__ import annotations
 
@@ -33,7 +33,7 @@ from pathlib import Path
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 log = logging.getLogger(__name__)
@@ -471,7 +471,7 @@ def run_ingestion(input_path: Path, *, dry_run: bool = False) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Ingest curated outfit links into the pipeline")
-    parser.add_argument("input", type=Path, help="Path to outfits.txt")
+    parser.add_argument("input", type=Path, help="Path to an outfits file (see data/sample_outfits.txt)")
     parser.add_argument("--dry-run", action="store_true", help="Scrape only, no DB writes")
     args = parser.parse_args()
 

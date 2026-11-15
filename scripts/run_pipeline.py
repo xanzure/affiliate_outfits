@@ -4,16 +4,16 @@ Manual pipeline runner.
 
 Usage:
   # One outfit for a specific concept
-  python run_pipeline.py "Bad Bunny concert"
+  python scripts/run_pipeline.py "Bad Bunny concert"
 
   # Full batch of 5 for a concept
-  python run_pipeline.py "Bad Bunny concert" --batch
+  python scripts/run_pipeline.py "Bad Bunny concert" --batch
 
   # One outfit for every concept
-  python run_pipeline.py --all
+  python scripts/run_pipeline.py --all
 
   # Full batch of 5 for every concept
-  python run_pipeline.py --all --batch
+  python scripts/run_pipeline.py --all --batch
 """
 from __future__ import annotations
 
@@ -22,7 +22,7 @@ import logging
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 log = logging.getLogger("run_pipeline")
