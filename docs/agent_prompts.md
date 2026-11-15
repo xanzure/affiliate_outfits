@@ -110,13 +110,12 @@ Suggested output shape:
 
 ---
 
-## Collage Agent Prompt
+## Collage (no prompt)
 
-Purpose:
-
-Generate a clean fashion inspiration collage.
-
-Requirements:
+The collage stage was planned as an agent but shipped deterministic: layouts are
+declarative HTML/CSS templates chosen by the outfit curator before sourcing (see
+[pipeline.md](pipeline.md#collage-renderer-deterministic)). Design goals carried
+over from the original prompt spec:
 
 - neutral background
 - consistent spacing
@@ -124,9 +123,9 @@ Requirements:
 - minimal typography
 - product focused
 
-Notes:
-
-TBD
+The one subjective call left — a shared background, accent, and type style per
+batch, so the five collages read as a set — is made by a small style agent
+(`app/agents/collage/style_agent.py`) and passed to the renderer as data.
 
 ---
 

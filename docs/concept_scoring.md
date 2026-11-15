@@ -1,4 +1,4 @@
-# Concept Scheduling And Scoring
+# Concept Selection And Scoring
 
 The system should feel like a human-run affiliate account, not a content farm.
 
@@ -8,7 +8,8 @@ The operating target is:
 - 1 concept selected per day
 - 5 outfits generated from that concept
 - 1 TikTok slideshow post containing all 5 outfits
-- 5 Pinterest posts, one per outfit, spaced through the day
+- 5 Pinterest posts, one per outfit
+- Posts go out through an approval queue, at most one per platform per cooldown window (default 24h)
 - A concept should not be posted on the same EST calendar day or within the previous 2 EST calendar days
 - New concepts start with a ranking score of `50`
 - Concepts are retired when their ranking score drops below `25`
@@ -35,11 +36,15 @@ Each daily run should:
 4. Select the single top-ranked eligible concept.
 5. Generate 5 outfits and 5 collages for that concept.
 6. Create one local TikTok slideshow record containing all 5 outfits.
-7. Create 5 local Pinterest records, one per outfit, scheduled 2 hours apart by default.
+7. Create 5 local Pinterest records, one per outfit.
+
+All records start as drafts awaiting approval; see [autoposting.md](autoposting.md)
+for how approved posts are queued and published.
 
 If no eligible concept exists, the system should report the shortage and skip the daily run.
 
-All scheduling dates use fixed EST (`UTC-05:00`) rather than local machine time.
+Concept-eligibility dates use fixed EST (`UTC-05:00`) rather than local machine
+time, so "posted today" means the same thing on a laptop and on a cloud worker.
 
 ## Platform Posting Shape
 
@@ -53,9 +58,8 @@ TikTok should create:
 
 Pinterest should create:
 
-- 5 local scheduled posts
+- 5 local draft posts
 - 1 outfit/collage per post
-- scheduled times spaced 2 hours apart by default
 
 This means 1 daily concept produces 6 platform records: 1 TikTok record and 5 Pinterest records.
 

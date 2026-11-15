@@ -1,8 +1,8 @@
 """
 Outfit Curator — the opinionated agent that drives the full search-and-review loop.
 
-Uses Claude Opus with extended thinking. Generates outfit specs, reviews actual search
-results, rejects bad finds, refines queries, and only approves when it's genuinely happy.
+Generates outfit specs, reviews actual search results, rejects bad finds, refines
+queries, and only approves when it's genuinely happy. Model: see _CURATOR_MODEL.
 """
 from __future__ import annotations
 

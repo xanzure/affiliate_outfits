@@ -1,291 +1,151 @@
-# Affiliate Content Engine Pipeline
+# Pipeline
 
-This document defines the complete end-to-end pipeline for the system.
+The end-to-end flow from a creative brief to a published post.
 
-Every stage must have a single responsibility.
+Every stage has a single responsibility. AI is used only where a subjective or
+creative decision is required; everything else is deterministic, typed, and
+independently testable.
 
-AI should only be used where subjective or creative decisions are required.
+The scheduler and storage layers operate on creative briefs, not generic outfit
+labels. A brief may carry a short display phrase, but it always preserves the
+contextual fields the Outfit Agent needs to interpret later.
 
-Everything else should be implemented deterministically.
+AI stages call the Anthropic Messages API. Each agent requests structured JSON,
+and deterministic validators check the response before the pipeline continues —
+a malformed response fails the stage instead of leaking into storage.
 
-The scheduler and storage layers operate on creative briefs, not generic outfit labels. A creative brief may include a simple display phrase, but it must also preserve contextual fields that the Outfit Agent can interpret later.
+Volume is meant to feel human-run: 8 active scored concepts, one concept per
+run, 5 outfits per concept, 1 TikTok slideshow + 5 Pinterest pins, and no concept
+reused within 2 days.
 
-AI stages run through the configured LLM provider. The current provider is Anthropic Claude. Each agent requests structured JSON, and deterministic validators check the response before the pipeline continues.
-
-Daily volume should feel human-run. The system should maintain 8 active scored concepts, select 1 top-ranked eligible concept per day, generate 5 outfits from that concept, create 1 TikTok slideshow post, create 5 Pinterest posts spaced through the day, and avoid concepts used today or within the previous 2 fixed-EST calendar days.
+```mermaid
+flowchart TD
+  S[Scheduler] --> O[Outfit Agent · AI]
+  O --> P[Product Pipeline]
+  P --> I[Image Pipeline]
+  I --> C[Collage Renderer]
+  C --> E[Engagement Agent · AI]
+  E --> D[Drafts: Needs Approval]
+  D -->|human approves| Q[Per-platform queue]
+  Q -->|cooldown tick| Pub[Publish to TikTok / Pinterest]
+  Pub --> A[Analytics]
+  A -->|score < 25| R[Prompt Agent · AI]
+  R --> S
+```
 
 ---
 
-## Pipeline
+## Stages
 
-### Scheduler (Deterministic)
+### Scheduler (deterministic)
 
-1. Load active creative brief concepts
-2. Exclude concepts posted today, yesterday, or the day before yesterday in fixed EST
-3. Sort eligible concepts by ranking score, highest first
-4. Select the single top-ranked eligible concept for the day
-5. Pass the full brief payload forward without reducing it to a one-line phrase
-
----
+1. Load active creative brief concepts, ordered by ranking score.
+2. Exclude concepts posted today or on either of the previous two calendar days
+   (dates are fixed US-Eastern).
+3. Select the top-ranked eligible concept.
+4. Pass the full brief forward — never a reduced one-line phrase.
 
 ### Outfit Agent (AI)
 
-Implementation: Claude-backed JSON agent.
+`app/agents/outfit/` — an opinionated "curator" agent.
 
-Input:
+1. Read outfit history for the brief to avoid repeats.
+2. Get the concept's style facets — ~8 distinct directions (e.g. "Y2K mall
+   streetwear", "rockstar leather") generated once and cached on the concept.
+   Diversity is structural: each outfit is assigned a different facet, a
+   collage template, and a gender presentation (seeded ~70/30 split), rather
+   than relying on sampling temperature.
+3. Generate one outfit spec per assignment, constrained to its template's item
+   composition, with search queries that preserve the brief's important cues.
+4. Parse and validate the JSON; malformed output fails the stage.
 
-- Creative brief
-- Outfit history
+Output: 5 structured outfit specs, each with a template tag, per-item search
+queries, and an interpretation rationale.
 
-Responsibilities:
+After products are found (next stage), the curator **reviews the actual search
+results**, approves or rejects each item, and writes refined queries for the
+rejects. Only rejected slots are re-searched, for a bounded number of rounds; the
+best set found is kept if it never fully approves.
 
-5. Check outfit history for that brief and related references
-6. Interpret subject, occasion, cultural context, known looks, color cues, silhouettes, and avoid rules
-7. Generate 5 distinct outfit specifications for the selected concept
-8. Validate diversity constraints
-9. Regenerate if diversity check fails
-10. Normalize into structured clothing categories
-11. Generate product search queries that preserve important brief cues
-12. Pass search queries to the deterministic product pipeline
+### Product Pipeline (deterministic)
 
-Output:
+`app/services/product_search_service.py`
 
-- Five structured outfit concepts
-- Search strategy
-- Interpretation rationale
-- Search strategy
+1. Reuse an existing product first: an explicit cached pick from the agent, or a
+   deterministic near-match on zone + colour family + garment tokens.
+2. Otherwise search the configured provider (API-backed, never scraping).
+3. Normalize provider fields into internal product candidates.
+4. Block resale marketplaces and suspicious retailers; allow cheap retailers only
+   for low-stakes categories.
+5. Rank candidates and select one product per outfit slot.
+6. Store the product with its normal URL and a separate nullable affiliate URL.
 
----
+### Image Pipeline (deterministic)
 
-### Product Pipeline (Deterministic)
+`app/pipelines/image_pipeline.py`, `app/services/image_service.py`
 
-15. Search Google Shopping through an API provider, never scraping
-16. Normalize result fields into internal product candidates
-17. Block suspicious retailers and allow conditional cheap/accessory retailers only for low-stakes categories
-18. Prefer cheaper safe items while preserving the API-backed candidate set
-19. Store accepted candidates, including price, retailer, normal URL, image URL, source metadata, and candidate rank
-20. Select one product per outfit search slot for the actual outfit
-21. Resolve affiliate URL only when a configured affiliate resolver is available
-22. Download product image
-23. Verify image quality
-24. Remove background
-25. Normalize image size/orientation
+1. Download the product image (or pull it from Storage if already processed).
+2. Isolate the product: Runflow product-isolation when configured, otherwise
+   local `rembg`.
+3. Validate the cutout (reject blank/black output) and fall back if it fails.
+4. Trim transparent padding and upload the cutout to Supabase Storage.
 
-Output:
+### Collage Renderer (deterministic)
 
-- Clean product assets
+`app/collage/html_export.py`
 
----
-
-### Collage Renderer (Deterministic)
-
-Initial implementation: deterministic collage rendering. A subjective layout agent can be added later if needed.
-
-Input:
-
-- Product images
-- Product metadata
-
-Responsibilities:
-
-26. Generate collage layout
-27. Place products into layout
-28. Add text / branding / numbering
-29. Store canvas and per-piece placement data for website recreation
-
-Output:
-
-- Final collage design
-- Collage layout manifest with canvas dimensions, product IDs, image paths, and x/y/width/height for each piece
-
----
-
-### Image Export (Deterministic)
-
-30. Export final image
-
-Output:
-
-- Publishable image asset
-
----
+1. Lay out the cutouts with the outfit's template (HTML/CSS), styled with the
+   batch's shared visual style (background, accent, type) from a small style
+   agent, so the five collages read as a set.
+2. Screenshot with headless Chromium at 1080×1350.
+3. Store the canvas size and per-piece placement (product ID, x/y/width/height)
+   so the website can rebuild the collage interactively.
 
 ### Engagement Agent (AI)
 
-Implementation: Claude-backed JSON agent.
+`app/agents/engagement/`
 
-Input:
+1. One TikTok slideshow caption + hashtags + music category for the set.
+2. Five Pinterest titles/descriptions, one per outfit.
 
-- Creative brief
-- Outfit set
+### Publishing (deterministic)
 
-Responsibilities:
+`app/pipelines/publish_pipeline.py`
 
-31. Generate one TikTok slideshow caption
-32. Generate five Pinterest titles/descriptions
-33. Generate hashtags
-34. Select music category
-35. Select trending sound from internal library
+1. Create 1 TikTok slideshow draft and 5 Pinterest drafts, all unapproved.
+2. A human approves drafts in the dashboard; each approval appends to that
+   platform's FIFO queue.
+3. When autoposting is on, the worker's queue tick publishes the head of each
+   platform's queue once its cooldown has elapsed.
+4. Store platform IDs and API responses on success; on failure, mark the post
+   failed with the API error (retryable from the dashboard).
 
-Output:
+### Analytics (deterministic)
 
-- Platform copy
-- Hashtags
-- Audio selection
-
----
-
-### Publishing (Deterministic)
-
-36. Generate landing page (optional)
-37. Attach affiliate links when links are available, otherwise attach normal product URLs
-38. Create one local TikTok slideshow record and five scheduled Pinterest records
-39. If autoposting is disabled, keep local draft/scheduled records only
-40. If autoposting is enabled, publish due TikTok/Pinterest records through platform APIs
-41. Store platform identifiers and API responses when posting succeeds
-42. Mark failed posts with API error metadata for retry/debugging
-
-Output:
-
-- Mirrored local draft records
-- Platform identifiers
-
----
-
-### Analytics (Deterministic)
-
-43. Wait for collection window
-44. Accept manually supplied views
-45. Accept manually supplied likes
-46. Accept manually supplied comments
-47. Accept manually supplied shares
-48. Accept manually supplied saves
-49. Accept manually supplied affiliate clicks
-50. Compute engagement score
-51. Convert post performance into a concept score adjustment
-52. Update the concept ranking score
-53. Clamp concept score between 0 and 100
-54. Retire concepts below 25
-
-Output:
-
-- Updated metrics
-- Updated concept ranking score
-- Concept performance history
-
----
+1. Accept manually entered views, likes, comments, shares, saves, and clicks
+   (platform analytics APIs need audited access).
+2. Compute an engagement score per post.
+3. Convert it into a concept score adjustment, clamped to 0–100.
+4. Retire concepts that drop below 25.
 
 ### Prompt Agent (AI)
 
-Implementation: Claude-backed JSON agent.
-
-Input:
-
-- Engagement history
-
-Responsibilities:
-
-55. Generate replacement creative brief when a concept retires
-56. Add replacement brief to the `needs_review` pool
-
-Output:
-
-- New replacement concept awaiting approval
-
----
-
-### Storage (Deterministic)
-
-57. Store all assets, metadata, metrics, briefs, and history
+1. When a concept retires, generate a replacement creative brief from engagement
+   history.
+2. Add it to the `needs_review` pool — new concepts are never auto-activated.
 
 ---
 
 ## Agent Boundaries
 
-### Outfit Agent
+| Agent | Responsible for | Not responsible for |
+|---|---|---|
+| Outfit | brief interpretation, outfit specs, diversity, search queries | image processing, publishing, analytics |
+| Style | one shared background/accent/type style per batch | layout geometry, rendering |
+| Engagement | captions, descriptions, hashtags, music category | publishing, analytics |
+| Prompt | replacement briefs, concept freshness | scoring, retirement decisions |
 
-Responsible for:
-
-- outfit generation
-- creative brief interpretation
-- diversity
-- product search
-- product candidate ranking and selection
-
-Not responsible for:
-
-- image processing
-- publishing
-- analytics
-
----
-
-### Collage Agent
-
-Responsible for:
-
-- visual composition
-- spacing
-- branding
-- layout
-
-Not responsible for:
-
-- downloading images
-- removing backgrounds
-- exporting files
-
----
-
-### Engagement Agent
-
-Responsible for:
-
-- captions
-- descriptions
-- hashtags
-- music selection
-
-Not responsible for:
-
-- publishing
-- analytics
-
----
-
-### Prompt Agent
-
-Responsible for:
-
-- generating replacement creative briefs
-- maintaining concept freshness
-
-Not responsible for:
-
-- engagement calculation
-- retirement logic
-
----
-
-## Core Principle
-
-The system should always follow:
-
-```text
-Creative Brief
-  -> Outfit Agent
-  -> Product Pipeline
-  -> Collage Agent
-  -> Image Export
-  -> Engagement Agent
-  -> Publishing
-  -> Analytics
-  -> Prompt Agent
-  -> Repeat
-```
-
-No agent should call another agent directly.
-
-Every stage should accept a typed input, produce a typed output, and be independently executable and testable.
-
-Deterministic stages should never erase the original brief context. If an agent needs a simplified display phrase, that phrase should be derived in addition to the full brief, not instead of it.
+No agent calls another agent directly. Every stage takes a typed input, produces
+a typed output, and can run on its own. Deterministic stages never erase the
+original brief context: a simplified display phrase is derived *in addition to*
+the full brief, not instead of it.

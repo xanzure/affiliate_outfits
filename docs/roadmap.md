@@ -1,28 +1,35 @@
 # Roadmap
 
-This document collects future ideas from the README and architecture notes so they are easy to prioritize later.
+The project is shelved (see the [README](../README.md#status)). If it's revived,
+this is the order the work would go in.
 
-## Product Ideas
+## 1. Reconnect
 
-- Dashboard
-- A/B testing
+Follow [the reconnect checklist](../README.md#reconnecting). Nothing in the code
+needs to change to run again — only keys and a worker host.
+
+## 2. Highest-value next steps
+
+1. **Make AWIN the primary product source.** Free, vetted catalogs with built-in
+   affiliate links. Blocked on merchant approvals at the time it was shelved
+   (3 joined, ~10 pending). Removes the biggest running cost.
+2. **Replace the SQL-over-RPC database bridge** (`app/db/pg_connection.py`) with a
+   real pooled Postgres connection. The `SECURITY DEFINER` functions are locked
+   to the service role, but a bridge that executes arbitrary SQL is still the
+   weakest point in the design ([security.md](security.md)).
+3. **TikTok app audit** so posts can be public, and **Pinterest Standard
+   access** so pins leave the sandbox.
+4. **Platform analytics APIs** to replace manual metrics entry once access allows.
+5. **CI dependency audits** (`pip-audit`, `npm audit --omit=dev`) on every push.
+
+## 3. Product ideas
+
+- A/B testing captions and collage templates against the concept score
 - Image style versioning
-- Multi-account support
-- Multi-language support
+- Multi-account / multi-brand support
+- More affiliate networks behind the existing provider interface
 
-## Platform And Affiliate Ideas
-
-- Affiliate network abstraction
-- Multiple affiliate networks
-- Multiple posting schedules
-
-## System Expansion Ideas
-
-- Multiple brands
-- Multiple image styles
-- Multiple agent models
-
-## Infrastructure / Learning Ideas
+## 4. Infrastructure / Learning Ideas
 
 Both are deterministic-infra additions (no AI), consistent with the "AI only for
 creative decisions" philosophy. Design detail: architecture.md → *Caching* and

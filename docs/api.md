@@ -1,4 +1,10 @@
-# Internal API
+# Stage Contracts
+
+> These are the input/output contracts for each pipeline stage, written in an
+> endpoint style so each stage could be split into its own service later. Today
+> they are implemented as typed Python functions in one process; there is no
+> HTTP API. The real entry points are the worker's `jobs` table (dashboard →
+> worker) and the scripts in `scripts/`.
 
 Everything communicates through typed interfaces.
 
@@ -229,9 +235,7 @@ Output:
 }
 ```
 
-When autoposting is enabled, the publisher maps local image paths to public URLs using `PUBLIC_ASSET_BASE_URL`, posts due TikTok/Pinterest records through platform APIs, and stores platform IDs on the post records.
-
-TikTok slideshow posts require public photo URLs. Pinterest scheduled posts are scheduled locally; the due-post publisher sends each pin to Pinterest when its scheduled time arrives.
+When autoposting is enabled, the publisher maps image paths to public URLs (see [autoposting.md](autoposting.md#public-media-urls)), posts approved queue heads through the TikTok/Pinterest APIs, and stores platform IDs on the post records.
 
 ---
 

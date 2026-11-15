@@ -1,28 +1,36 @@
-# Vance Archives — Frontend
+# Vance Archives — Web
 
-Public-facing Next.js site for the affiliate content engine. It's read-only and
-reads concepts/outfits/products directly from Supabase. See
-[../docs/website.md](../docs/website.md) for brand direction, pages, and the data
-layer.
+Next.js app with two halves:
+
+- **Public site** (`app/(site)/`) — read-only concept and outfit pages, reading
+  Supabase directly with the anon key. Collages are rebuilt interactively from
+  stored layout data.
+- **Admin dashboard** (`app/admin/`) — auth-gated tabs for approving and queueing
+  posts, managing outfits and the product wardrobe, metrics, and an activity log.
+
+See [../docs/website.md](../docs/website.md) for pages, the data layer, and the
+dashboard.
 
 ## Develop
 
 ```bash
+cp .env.example .env.local   # fill in Supabase values
 npm install
-npm run dev   # http://localhost:3000
+npm run dev                  # http://localhost:3100
+npm test                     # Vitest (Supabase is mocked; no keys needed)
 ```
 
-Requires Supabase credentials in `web/.env.local`:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=...
-NEXT_PUBLIC_SUPABASE_ANON_KEY=...
-```
+Set `ADMIN_DEV_BYPASS=true` in `.env.local` to skip the admin login locally (it's
+ignored in production).
 
 ## Structure
 
-- `app/` — routes (`/` concepts index, `/concept/[id]` detail, `terms`, `privacy`)
-- `components/` — `ConceptCard`, `OutfitCanvas` (interactive flat-lay), `ProductPanel`
-- `lib/data.ts` — the only data-access module (Supabase queries)
-- `lib/types.ts` — types mirroring the backend `models.py`
-- `app/globals.css` — design tokens (warm paper bg, bronze accent, serif display)
+- `app/(site)/` — `/` concepts index, `/concept/[id]` detail, `terms`, `privacy`
+- `app/admin/` — dashboard routes; `(dashboard)/*/actions.ts` are server actions
+- `proxy.ts` — guards `/admin/*` (session + email allowlist)
+- `components/` — public components (`OutfitCanvas`, `ConceptCard`, …) and
+  `components/admin/`
+- `lib/data.ts` — public-site data access
+- `lib/admin.ts` — dashboard data layer (queue sections, cooldowns, outfits, metrics)
+- `lib/auth.ts` — admin allowlist and dev bypass
+- `tests/` — Vitest suite, with an in-memory Supabase fake (`fakeSupabase.ts`)

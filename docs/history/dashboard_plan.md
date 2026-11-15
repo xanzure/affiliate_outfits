@@ -1,5 +1,12 @@
 # Admin Dashboard — Build Plan
 
+> **Historical document.** This is the plan the dashboard was built from in June
+> 2026, kept to show how the plan compared to what shipped. The scheduling
+> design below (fixed EST slots, `reconcileSchedule`, `scheduled_for`) was later
+> replaced by an approval queue with a per-platform cooldown — see
+> [autoposting.md](../autoposting.md) and Phase 6 of the
+> [build log](../progress.md#phase-6--publishing-for-real-jul-3).
+
 Status: **BUILT** (all build-order steps 1–8 implemented and verified; TikTok
 publish stays stubbed behind `AUTOPOSTING_ENABLED` pending the audit — step 9).
 

@@ -143,16 +143,15 @@ Data access functions:
 | Concept detail | `getConcept`, `getOutfitsForConcept` | Concept plus its outfits with products + layout |
 
 The Python pipeline writes concepts, outfits, products, and `outfit.spec.layout`
-to the same Supabase Postgres instance. The site is read-only.
-
-The static fixtures in `web/lib/mock/` are legacy scaffolding and are no longer
-imported.
+to the same Supabase Postgres instance. The public site is read-only and uses the
+anon key, which RLS limits to `SELECT` on those three tables
+([security.md](security.md)).
 
 ### Product Links
 
 Each product has a `url` (standard product page) and an `affiliate_url` (affiliate-tracked link, may be null). The frontend always prefers `affiliate_url` when present and falls back to `url`. This means affiliate integration requires no frontend changes — only the backend needs to populate `affiliate_url`.
 
-### Collage Agent Output
+### Collage Layout Contract
 
 The collage layout layer must write website-ready layout data into `outfit.spec.layout` as an array of `ProductLayout` objects. The frontend reads this array directly to position product images on the canvas. If `spec.layout` is absent or empty, the frontend falls back to a simple stacked default layout.
 
@@ -165,23 +164,43 @@ image service. The pipeline uploads each cutout to Supabase storage (the
 `product-images` bucket) and points `product.image_url` at that public URL, so the
 flat-lay positions real cutouts — not raw retailer CDN photos.
 
-Rendered collages are saved to disk (`data/images/collages/{outfit_id}.png`) and
-recorded in the `collages` table for audit/history. When a collage is generated,
-the pipeline can set `concept.metadata.cover_image_url` so the concept card shows a
-real cover.
+Rendered collages are uploaded to Supabase Storage and recorded in the `collages`
+table (`collage_url`). When a collage is generated, the pipeline can set
+`concept.metadata.cover_image_url` so the concept card shows a real cover.
 
-`Post.image_path` remains the local disk path used internally by the publisher.
-TikTok/Pinterest autoposting requires publicly reachable image URLs (see
-[autoposting.md](autoposting.md)).
+TikTok/Pinterest autoposting requires publicly reachable image URLs on a domain
+the site owns, which is why Storage is proxied through `/media/*` (see
+[autoposting.md](autoposting.md#public-media-urls)).
 
 ---
 
-## What The Frontend Does Not Handle
+## Admin Dashboard
 
-- Authentication or access control
+`web/app/admin/` is an auth-gated dashboard in the same Next.js app (separate
+route group, so admin chrome never leaks into public pages).
+
+| Tab | What it does |
+|---|---|
+| Schedule | Needs Approval → per-platform Queue (reorder, post now) → Failed (retry) |
+| Outfits | Every generated outfit with status badges; regenerate images/collage, generate posts, delete |
+| Wardrobe | Every sourced product cutout; edit name/category/colour/brand |
+| Metrics | Manual metrics entry, concept performance, retirement proximity |
+| Activity | Audit log of admin actions and worker job lifecycle |
+
+- **Auth:** Supabase email + password, plus an `ADMIN_EMAILS` allowlist checked in
+  two places — the route proxy (`web/proxy.ts`) and server-side
+  (`getAdminUser()`). `ADMIN_DEV_BYPASS` skips login locally and is ignored in
+  production.
+- **Writes** go through server actions using the service-role key, which never
+  reaches the browser.
+- **Pipeline work** (generate, regenerate, retry) is enqueued as a row in the
+  `jobs` table for the Python worker; a Tasks panel polls job status.
+
+## What The Public Site Does Not Handle
+
 - Publishing or scheduling
 - Analytics ingestion
 - Affiliate link generation
-- Image scraping or processing
+- Image processing
 - Agent execution or pipeline triggering
 - Payment or subscription logic

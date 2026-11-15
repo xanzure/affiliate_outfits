@@ -8,7 +8,33 @@ The system treats concepts as structured creative briefs. A brief can include a 
 
 Initial AI behavior is API-backed. Agent modules call the configured LLM provider, request structured JSON, and pass responses through deterministic validators before the pipeline continues.
 
-Scheduling is concept-score based. The system begins with 8 active creative brief concepts, each starting at score `50`. A daily run selects the single top-ranked eligible concept, generates 5 outfits from that concept, creates 1 TikTok slideshow post, and creates 5 Pinterest posts spaced through the day. Concepts used today or within the previous 2 fixed-EST calendar days are ineligible. Concepts below score `25` are retired and replaced.
+Concept selection is score based. The system begins with 8 active creative brief concepts, each starting at score `50`. A run selects the top-ranked eligible concept, generates 5 outfits from it, and drafts 1 TikTok slideshow post and 5 Pinterest posts. Concepts used within the previous 2 days are ineligible. Concepts below score `25` are retired and replaced.
+
+Nothing publishes on generation. Drafts wait for human approval in the dashboard, then join a per-platform FIFO queue that the worker drains at most once per cooldown window (default 24h) — see [Publisher](#publisher).
+
+## Runtime Topology
+
+```mermaid
+flowchart LR
+  user([Browser]) --> web
+  subgraph Vercel
+    web["Next.js<br/>public site + /admin"]
+  end
+  subgraph Supabase
+    db[("Postgres<br/>concepts · outfits · products<br/>posts · jobs · metrics")]
+    storage[("Storage<br/>cutouts · collages")]
+  end
+  subgraph Railway["Railway (Docker)"]
+    worker["Python worker<br/>pipeline + publish-queue tick"]
+  end
+  web -- "reads (anon, RLS)" --> db
+  web -- "server actions:<br/>approve · reorder · enqueue job" --> db
+  worker -- "claim / finish jobs" --> db
+  worker -- "upload images" --> storage
+  worker --> ext["Anthropic · product search<br/>TikTok · Pinterest"]
+```
+
+Vercel can't run the Python pipeline, so the dashboard never calls it directly. It writes a row to the `jobs` table; the long-running worker claims jobs, runs pipeline stages, and writes results back. The same worker loop runs the publish-queue tick. The public site reads Supabase directly with the anon key (read-only by RLS); the dashboard and worker use the service-role key server-side.
 
 Every module should have:
 
@@ -69,7 +95,7 @@ Output:
 - downloaded images
 - metadata
 
-The initial product source is Google Shopping through an API provider. The project must not scrape product pages or search results. Provider-specific result fields are normalized before storage so the system can switch between sources — Google Shopping, the AWIN affiliate catalog (`PRODUCT_SEARCH_PROVIDER=awin`), or future networks — without changing outfit generation, collage rendering, or the website. See [product_sourcing.md](product_sourcing.md).
+Product search sits behind a `ProductSearchProvider` interface, selected by `PRODUCT_SEARCH_PROVIDER`: Tavily (first, retired), SerpAPI Google Shopping, Apify (the last live provider), the AWIN affiliate catalog, or built-in `fixtures` for offline runs and tests. Provider-specific result fields are normalized before storage so the source can change without touching outfit generation, collage rendering, or the website. See [product_sourcing.md](product_sourcing.md).
 
 Product records store `url` and `affiliate_url` separately. `url` is the standard product page used by the website today. `affiliate_url` remains null until a configured affiliate resolver can produce a tracked link.
 
@@ -89,7 +115,7 @@ Output:
 - finished collage
 - stored layout manifest with canvas and per-piece coordinates
 
-The initial collage layer is deterministic rather than AI-backed. It stores each product image's position, size, and product ID in the database so a website can recreate the collage without reverse-engineering the final PNG.
+The collage layer is deterministic rather than AI-backed. Collages are HTML/CSS pages laid out by declarative per-shape templates (`app/collage/html_export.py`) and screenshotted with headless Chromium. The template is chosen up front by the outfit curator, so the items are sourced to fit the layout they'll be rendered in. Each piece's position, size, and product ID is stored in the database so the website can recreate the collage without reverse-engineering the final PNG. The earlier PIL geometry renderer (`app/collage/export.py`) remains as a fallback and for its category→zone classifier.
 
 ---
 
@@ -121,9 +147,9 @@ Output:
 - local publish record
 - optional platform identifiers when manually supplied
 
-The publishing layer always creates local post records first. When `AUTOPOSTING_ENABLED=true`, it can publish due records through the TikTok and Pinterest APIs. TikTok photo posts and Pinterest pins require publicly reachable image URLs, so `PUBLIC_ASSET_BASE_URL` must point at wherever `data/images/...` assets are hosted.
+The publishing layer always creates post records first, as drafts that need approval. Approving a draft appends it to its platform's FIFO queue. When `AUTOPOSTING_ENABLED=true`, the worker's `process_queue_tick` publishes the head of each platform's queue once that platform's cooldown (`POST_COOLDOWN_HOURS`, default 24) has elapsed. The cooldown is derived, not stored — the latest of any post's `published_at` or failed-attempt stamp — so a broken token can't burn through the whole queue. "Post now" bypasses the cooldown. See [autoposting.md](autoposting.md).
 
-TikTok is configured for photo slideshow posting. Pinterest posts remain scheduled locally until their due time; run `scripts/publish_due.py` from cron or another scheduler to publish due pins throughout the day.
+TikTok photo posts and Pinterest pins require publicly reachable image URLs, so `PUBLIC_ASSET_BASE_URL` must point at a host serving the collage images (in production, Supabase Storage proxied through the site's own domain).
 
 ---
 
@@ -238,8 +264,8 @@ chosen TTL (SerpApi permits it; verify per provider before raising the TTL).
   and runs on Railway (`CMD python scripts/worker.py --loop`). This container *is*
   the pipeline; it is already the production worker.
 - **Dashboard** — the Next.js app in `web/` deploys on Vercel. A `web/Dockerfile`
-  (multi-stage, Next.js `output: "standalone"`) makes it independently
-  containerizable for reproducible local / self-host runs without disturbing the
+  *(planned)* (multi-stage, Next.js `output: "standalone"`) would make it
+  independently containerizable for local / self-host runs without disturbing the
   Vercel path.
 - **`docker-compose.yml`** *(planned, repo root)* — one-command local stack:
   `worker` + `redis` + `web`. Supabase (Postgres + Storage) stays hosted, so no
@@ -249,10 +275,10 @@ chosen TTL (SerpApi permits it; verify per provider before raising the TTL).
   so the worker image (which does `COPY . .`) stays slim and never ships the JS
   build.
 
-Current state: the pipeline-in-container is effectively done (it is the Railway
-worker). "Finishing" containerization is the local-reproducibility surface — the
-web image, the compose wiring, and the Redis service — so the whole system comes
-up with `docker compose up`.
+Current state: the pipeline container is done — it was the production Railway
+worker. The remaining work (not started) is the local-reproducibility surface —
+the web image, the compose wiring, and the Redis service — so the whole system
+comes up with `docker compose up`.
 
 ---
 
