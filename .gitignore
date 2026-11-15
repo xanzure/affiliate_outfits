@@ -24,6 +24,7 @@ data/**/*.json
 !data/concepts/.gitkeep
 !data/llm_responses/sample_outfit_response.json
 !data/llm_responses/sample_engagement_response.json
+!data/llm_responses/sample_replacement_concept_response.json
 !data/llm_responses/.gitkeep
 !data/retailer_cache/products.json
 !data/retailer_cache/.gitkeep
@@ -41,6 +42,7 @@ data/outfit_history/*
 !data/outfit_history/.gitkeep
 data/retailer_cache/*
 !data/retailer_cache/.gitkeep
+!data/retailer_cache/products.json
 
 app/assets/backgrounds/*
 !app/assets/backgrounds/.gitkeep

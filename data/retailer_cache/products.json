@@ -1,0 +1,132 @@
+[
+  {
+    "retailer": "Local Rack",
+    "name": "Red Nylon Camp Collar Shirt",
+    "category": "top",
+    "tags": ["streetwear", "summer", "concert", "camp collar", "relaxed"],
+    "colors": ["red"],
+    "price_cents": 4200,
+    "url": "https://example.test/products/red-nylon-camp-collar-shirt",
+    "image_url": "https://example.test/images/red-nylon-camp-collar-shirt.png",
+    "metadata": {
+      "fixture": true
+    }
+  },
+  {
+    "retailer": "Local Rack",
+    "name": "Blue Relaxed Cargo Pant",
+    "category": "bottom",
+    "tags": ["streetwear", "concert", "relaxed", "cargo"],
+    "colors": ["blue"],
+    "price_cents": 5800,
+    "url": "https://example.test/products/blue-relaxed-cargo-pant",
+    "image_url": "https://example.test/images/blue-relaxed-cargo-pant.png",
+    "metadata": {
+      "fixture": true
+    }
+  },
+  {
+    "retailer": "Local Rack",
+    "name": "White Retro Sport Sunglasses",
+    "category": "accessory",
+    "tags": ["statement accessories", "sunglasses", "concert", "playful"],
+    "colors": ["white"],
+    "price_cents": 2400,
+    "url": "https://example.test/products/white-retro-sport-sunglasses",
+    "image_url": "https://example.test/images/white-retro-sport-sunglasses.png",
+    "metadata": {
+      "fixture": true
+    }
+  },
+  {
+    "retailer": "Local Rack",
+    "name": "Canvas Puerto Rico Color Cap",
+    "category": "accessory",
+    "tags": ["puerto rican", "cap", "concert", "red white blue", "statement accessories"],
+    "colors": ["red", "white", "blue"],
+    "price_cents": 2800,
+    "url": "https://example.test/products/canvas-puerto-rico-color-cap",
+    "image_url": "https://example.test/images/canvas-puerto-rico-color-cap.png",
+    "metadata": {
+      "fixture": true
+    }
+  },
+  {
+    "retailer": "Quiet Goods",
+    "name": "Navy Water-Resistant Trench",
+    "category": "outerwear",
+    "tags": ["rain", "workday", "coastal", "polished", "weather-ready outerwear"],
+    "colors": ["navy"],
+    "price_cents": 8900,
+    "url": "https://example.test/products/navy-water-resistant-trench",
+    "image_url": "https://example.test/images/navy-water-resistant-trench.png",
+    "metadata": {
+      "fixture": true
+    }
+  },
+  {
+    "retailer": "Quiet Goods",
+    "name": "Cream Relaxed Button Down",
+    "category": "top",
+    "tags": ["coastal", "workday", "relaxed tailoring", "light layers"],
+    "colors": ["cream"],
+    "price_cents": 4600,
+    "url": "https://example.test/products/cream-relaxed-button-down",
+    "image_url": "https://example.test/images/cream-relaxed-button-down.png",
+    "metadata": {
+      "fixture": true
+    }
+  },
+  {
+    "retailer": "Quiet Goods",
+    "name": "Soft Gray Tailored Trouser",
+    "category": "bottom",
+    "tags": ["workday", "office", "relaxed tailoring", "capsule"],
+    "colors": ["soft gray", "gray"],
+    "price_cents": 6400,
+    "url": "https://example.test/products/soft-gray-tailored-trouser",
+    "image_url": "https://example.test/images/soft-gray-tailored-trouser.png",
+    "metadata": {
+      "fixture": true
+    }
+  },
+  {
+    "retailer": "Capsule Market",
+    "name": "Black Lug Sole Ankle Boot",
+    "category": "shoe",
+    "tags": ["black boots", "fall", "capsule", "walking", "comfortable"],
+    "colors": ["black"],
+    "price_cents": 6900,
+    "url": "https://example.test/products/black-lug-sole-ankle-boot",
+    "image_url": "https://example.test/images/black-lug-sole-ankle-boot.png",
+    "metadata": {
+      "fixture": true
+    }
+  },
+  {
+    "retailer": "Capsule Market",
+    "name": "Olive Utility Jacket",
+    "category": "outerwear",
+    "tags": ["fall", "capsule", "simple layers", "structured basics"],
+    "colors": ["olive"],
+    "price_cents": 5200,
+    "url": "https://example.test/products/olive-utility-jacket",
+    "image_url": "https://example.test/images/olive-utility-jacket.png",
+    "metadata": {
+      "fixture": true
+    }
+  },
+  {
+    "retailer": "Capsule Market",
+    "name": "Ivory Ribbed Long Sleeve Tee",
+    "category": "top",
+    "tags": ["fall", "capsule", "basic", "simple layers"],
+    "colors": ["ivory"],
+    "price_cents": 2600,
+    "url": "https://example.test/products/ivory-ribbed-long-sleeve-tee",
+    "image_url": "https://example.test/images/ivory-ribbed-long-sleeve-tee.png",
+    "metadata": {
+      "fixture": true
+    }
+  }
+]

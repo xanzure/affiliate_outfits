@@ -1,0 +1,29 @@
+{
+  "seed": "Bad Bunny airport streetwear with Puerto Rican color cues",
+  "subject": "Bad Bunny",
+  "occasion": "airport streetwear",
+  "context_notes": [
+    "Use Puerto Rican color cues tastefully through accessories or palette",
+    "Reference relaxed celebrity travel styling rather than concert styling"
+  ],
+  "style_cues": [
+    "oversized layers",
+    "sporty sunglasses",
+    "statement cap",
+    "comfortable sneakers"
+  ],
+  "color_cues": [
+    "red",
+    "white",
+    "blue"
+  ],
+  "required_considerations": [
+    "Do not reduce the concept to generic travel outfit",
+    "Include at least one specific accessory-led reference when product availability allows"
+  ],
+  "avoid": [
+    "costume-like styling",
+    "stereotypes",
+    "unsupported claims about symbolism"
+  ]
+}
